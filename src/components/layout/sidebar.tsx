@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { SyncStatusChip } from '@/components/platforms/sync-status-chip';
 
 const NAV = [
   { href: '/dashboard', label: '仪表盘' },
@@ -45,6 +46,7 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <SyncStatusChip />
       <Button variant="ghost" size="sm" className="mt-2" onClick={logout}>
         退出登录
       </Button>
