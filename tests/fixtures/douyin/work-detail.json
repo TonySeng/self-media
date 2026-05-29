@@ -1,0 +1,21 @@
+{
+  "status_code": 0,
+  "aweme_detail": {
+    "aweme_id": "7300000000000000001",
+    "desc": "示例作品标题",
+    "create_time": 1748467200,
+    "video": {
+      "duration": 30000,
+      "cover": { "url_list": ["https://example.com/cover.jpg"] },
+      "play_addr": { "url_list": ["https://example.com/play.mp4"] }
+    },
+    "statistics": {
+      "play_count": 1500,
+      "digg_count": 150,
+      "comment_count": 20,
+      "share_count": 8,
+      "collect_count": 12,
+      "finish_rate": 0.42
+    }
+  }
+}

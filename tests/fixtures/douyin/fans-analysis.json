@@ -1,0 +1,19 @@
+{
+  "status_code": 0,
+  "data": {
+    "total_fans": 12345,
+    "gender_distribution": [
+      { "key": "male", "value": 0.6 },
+      { "key": "female", "value": 0.4 }
+    ],
+    "age_distribution": [
+      { "key": "18-24", "value": 0.3 },
+      { "key": "25-30", "value": 0.5 },
+      { "key": "31-40", "value": 0.2 }
+    ],
+    "region_distribution": [
+      { "key": "广东", "value": 0.2 },
+      { "key": "北京", "value": 0.15 }
+    ]
+  }
+}

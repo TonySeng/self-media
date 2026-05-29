@@ -1,0 +1,8 @@
+{
+  "status_code": 0,
+  "user": {
+    "sec_uid": "MS4wLjABAAAA_test_sec_uid",
+    "nickname": "测试昵称",
+    "avatar_thumb": { "url_list": ["https://example.com/avatar.jpg"] }
+  }
+}
