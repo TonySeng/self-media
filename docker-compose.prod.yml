@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_DB:-self_media}
+    volumes:
+      - /var/self-media/db:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  web:
+    build: .
+    image: self-media-web:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-self_media}?schema=public
+      MASTER_KEY: ${MASTER_KEY:?required}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?required}
+      SESSION_SECRET: ${SESSION_SECRET:?required}
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      LOCAL_STORAGE_PATH: /data/uploads
+      NODE_ENV: production
+    volumes:
+      - /var/self-media/uploads:/data/uploads
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/self-media/caddy_data:/data
+      - /var/self-media/caddy_config:/config
+    networks:
+      - internal
+
+networks:
+  internal:

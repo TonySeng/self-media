@@ -1,0 +1,16 @@
+{
+	# If you have a domain, uncomment the next line and Caddy will auto-issue HTTPS:
+	# email you@example.com
+	admin off
+}
+
+:80 {
+	reverse_proxy web:3000
+	encode gzip
+}
+
+# Once you have a domain, replace the :80 block above with:
+# yourdomain.example.com {
+#         reverse_proxy web:3000
+#         encode gzip
+# }
