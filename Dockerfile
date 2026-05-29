@@ -11,6 +11,7 @@ RUN pnpm install --frozen-lockfile
 
 # ---- Build ----
 FROM base AS build
+ENV BUILD_STANDALONE=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm prisma generate
