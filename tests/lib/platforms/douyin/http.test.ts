@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
-import { douyinFetch, sleep } from '@/lib/platforms/douyin/http';
+import { douyinFetch, sleep, HttpError } from '@/lib/platforms/douyin/http';
 
 let agent: MockAgent;
 let original: Dispatcher;
@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  agent.assertNoPendingInterceptors();
   setGlobalDispatcher(original);
   await agent.close();
 });
@@ -28,22 +29,31 @@ describe('douyinFetch', () => {
     expect(await res.json()).toEqual({ ok: 1 });
   });
 
-  it('retries 3 times on 5xx then succeeds', async () => {
+  it('retries on 5xx then succeeds', async () => {
     const pool = agent.get('https://creator.douyin.com');
-    pool.intercept({ path: '/y', method: 'GET' }).reply(500, '').times(2);
+    pool.intercept({ path: '/y', method: 'GET' }).reply(500, '').times(3);
     pool.intercept({ path: '/y', method: 'GET' }).reply(200, { ok: 1 });
 
     const res = await douyinFetch('https://creator.douyin.com/y', { cookie: 'sessionid_ss=a', retryDelayMs: 1 });
     expect(res.status).toBe(200);
   });
 
-  it('throws after exhausting retries', async () => {
+  it('throws after exhausting retries on 5xx', async () => {
     const pool = agent.get('https://creator.douyin.com');
     pool.intercept({ path: '/z', method: 'GET' }).reply(500, '').times(4);
 
     await expect(
       douyinFetch('https://creator.douyin.com/z', { cookie: 'sessionid_ss=a', retryDelayMs: 1 }),
     ).rejects.toThrow(/HTTP 500/);
+  });
+
+  it('throws immediately on 4xx without retrying', async () => {
+    const pool = agent.get('https://creator.douyin.com');
+    pool.intercept({ path: '/q', method: 'GET' }).reply(404, 'not found').times(1);
+
+    await expect(
+      douyinFetch('https://creator.douyin.com/q', { cookie: 'sessionid_ss=a', retryDelayMs: 1 }),
+    ).rejects.toThrow(HttpError);
   });
 });
 
