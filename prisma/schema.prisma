@@ -23,6 +23,22 @@ enum CookieStatus {
   INVALID
 }
 
+enum MaterialType {
+  COPY
+  TOPIC
+  VIDEO
+  IMAGE
+  AUDIO
+  IDEA
+  REFERENCE
+}
+
+enum IdeaStatus {
+  DRAFT       // 构思中
+  ADOPTED     // 已采用
+  DISCARDED   // 已废弃
+}
+
 model PlatformAccount {
   id              String       @id @default(cuid())
   platform        Platform
@@ -57,8 +73,9 @@ model Work {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  account PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
-  metrics WorkMetric[]
+  account   PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+  metrics   WorkMetric[]
+  materials Material[]      @relation("MaterialToWork")
 
   @@unique([platformAccountId, platformWorkId])
   @@index([platformAccountId, publishedAt])
@@ -121,4 +138,33 @@ model SyncJob {
   account PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
 
   @@index([platformAccountId, startedAt])
+}
+
+model Material {
+  id          String       @id @default(cuid())
+  type        MaterialType
+  title       String
+  content     String?      // COPY 富文本 HTML / TOPIC 描述 / REFERENCE 摘要
+  fileKey     String?      // VIDEO/IMAGE/AUDIO 文件路径（相对 storage root）
+  fileSize    Int?         // 字节
+  fileMime    String?      // MIME type
+  url         String?      // REFERENCE 外链
+  ideaStatus  IdeaStatus?  // IDEA 专用
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tags  MaterialTag[]
+  works Work[]        @relation("MaterialToWork")
+
+  @@index([type, createdAt])
+  @@index([type, ideaStatus])
+}
+
+model MaterialTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String?  // hex color for UI badge
+  createdAt DateTime @default(now())
+
+  materials Material[]
 }
