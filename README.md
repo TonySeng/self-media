@@ -101,7 +101,14 @@ nano .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+## 已知限制
+
+- **抖音接口签名**：v0.1 不实现 `_signature` / `X-Bogus` / `msToken` / `a_bogus` 等签名算法，需要从浏览器 DevTools 抓包后粘贴完整 URL 到 `src/lib/platforms/douyin/endpoints.ts`。详见 [docs/douyin-endpoint-capture.md](./docs/douyin-endpoint-capture.md)。
+- **作品同步**：每次全量重拉作品 + 新建快照（不做 published_at 增量）；规模可控，但账号作品超过 1000 时同步耗时显著增加。
+- **Cookie 失效后无自动重试**：失效会标记 EXPIRED + 顶部红条提示，需用户手动重新导入。
+
 ## 文档
 
 - [设计文档](./docs/superpowers/specs/2026-05-29-self-media-platform-design.md)
 - [实施计划目录](./docs/superpowers/plans/)
+- [抖音抓包指南](./docs/douyin-endpoint-capture.md)
