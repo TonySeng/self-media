@@ -50,7 +50,7 @@ describe('REFERENCE Material CRUD API', () => {
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBeGreaterThan(0);
-    const refMaterial = data.find((m: any) => m.id === createdMaterialId);
+    const refMaterial = data.find((m: { id: string }) => m.id === createdMaterialId);
     expect(refMaterial).toBeDefined();
     expect(refMaterial.type).toBe(MaterialType.REFERENCE);
   });

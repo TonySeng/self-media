@@ -70,7 +70,7 @@ describe('IDEA Material CRUD API', () => {
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBeGreaterThan(0);
-    const ideaMaterial = data.find((m: any) => m.id === createdMaterialId);
+    const ideaMaterial = data.find((m: { id: string }) => m.id === createdMaterialId);
     expect(ideaMaterial).toBeDefined();
     expect(ideaMaterial.type).toBe(MaterialType.IDEA);
   });
@@ -94,7 +94,7 @@ describe('IDEA Material CRUD API', () => {
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBeGreaterThan(0);
-    data.forEach((m: any) => {
+    data.forEach((m: { type: string; ideaStatus: string }) => {
       expect(m.type).toBe(MaterialType.IDEA);
       expect(m.ideaStatus).toBe(IdeaStatus.DRAFT);
     });

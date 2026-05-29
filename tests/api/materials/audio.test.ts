@@ -52,7 +52,7 @@ describe('AUDIO Material CRUD API', () => {
 
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBeGreaterThan(0);
-    const audioMaterial = data.find((m: any) => m.id === createdMaterialId);
+    const audioMaterial = data.find((m: { id: string }) => m.id === createdMaterialId);
     expect(audioMaterial).toBeDefined();
     expect(audioMaterial.type).toBe(MaterialType.AUDIO);
   });

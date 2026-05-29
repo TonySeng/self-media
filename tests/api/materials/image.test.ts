@@ -1,17 +1,28 @@
-import { describe, it, expect, afterAll } from 'vitest';
-import { PrismaClient, MaterialType } from '@prisma/client';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { MaterialType } from '@prisma/client';
+import { db } from '@/lib/db';
+import { POST, GET } from '@/app/api/materials/route';
+import { GET as GET_BY_ID, PUT, DELETE } from '@/app/api/materials/[id]/route';
 
-const prisma = new PrismaClient();
-const BASE_URL = 'http://localhost:3000/api/materials';
+function createRequest(url: string, method: string, body?: unknown): Request {
+  return new Request(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
 
 describe('IMAGE Material CRUD API', () => {
   let createdMaterialId: string;
 
+  beforeEach(async () => {
+    await db.material.deleteMany({ where: { type: MaterialType.IMAGE } });
+  });
+
   afterAll(async () => {
     if (createdMaterialId) {
-      await prisma.material.delete({ where: { id: createdMaterialId } }).catch(() => {});
+      await db.material.delete({ where: { id: createdMaterialId } }).catch(() => {});
     }
-    await prisma.$disconnect();
   });
 
   it('should create an IMAGE material with fileKey, fileSize, fileMime', async () => {
@@ -23,12 +34,7 @@ describe('IMAGE Material CRUD API', () => {
       fileMime: 'image/jpeg',
     };
 
-    const res = await fetch(BASE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
+    const res = await POST(createRequest('http://localhost/api/materials', 'POST', payload));
     expect(res.status).toBe(201);
     const data = await res.json();
     expect(data.id).toBeDefined();
@@ -42,7 +48,21 @@ describe('IMAGE Material CRUD API', () => {
   });
 
   it('should query IMAGE materials by type', async () => {
-    const res = await fetch(`${BASE_URL}?type=${MaterialType.IMAGE}`);
+    const createRes = await POST(
+      createRequest('http://localhost/api/materials', 'POST', {
+        type: MaterialType.IMAGE,
+        title: 'Photo',
+        fileKey: 'uploads/2026/05/p.jpg',
+        fileSize: 1024,
+        fileMime: 'image/jpeg',
+      }),
+    );
+    const created = await createRes.json();
+    createdMaterialId = created.id;
+
+    const res = await GET(
+      createRequest(`http://localhost/api/materials?type=${MaterialType.IMAGE}`, 'GET'),
+    );
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -53,6 +73,18 @@ describe('IMAGE Material CRUD API', () => {
   });
 
   it('should update an IMAGE material', async () => {
+    const createRes = await POST(
+      createRequest('http://localhost/api/materials', 'POST', {
+        type: MaterialType.IMAGE,
+        title: 'Photo',
+        fileKey: 'uploads/2026/05/p.jpg',
+        fileSize: 1024,
+        fileMime: 'image/jpeg',
+      }),
+    );
+    const created = await createRes.json();
+    createdMaterialId = created.id;
+
     const updatePayload = {
       title: 'Updated Product Photo',
       fileKey: 'uploads/2026/05/product-photo-v2.jpg',
@@ -60,11 +92,10 @@ describe('IMAGE Material CRUD API', () => {
       fileMime: 'image/jpeg',
     };
 
-    const res = await fetch(`${BASE_URL}/${createdMaterialId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatePayload),
-    });
+    const res = await PUT(
+      createRequest(`http://localhost/api/materials/${createdMaterialId}`, 'PUT', updatePayload),
+      { params: Promise.resolve({ id: createdMaterialId }) },
+    );
 
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -75,13 +106,28 @@ describe('IMAGE Material CRUD API', () => {
   });
 
   it('should delete an IMAGE material', async () => {
-    const res = await fetch(`${BASE_URL}/${createdMaterialId}`, {
-      method: 'DELETE',
-    });
+    const createRes = await POST(
+      createRequest('http://localhost/api/materials', 'POST', {
+        type: MaterialType.IMAGE,
+        title: 'Photo',
+        fileKey: 'uploads/2026/05/p.jpg',
+        fileSize: 1024,
+        fileMime: 'image/jpeg',
+      }),
+    );
+    const created = await createRes.json();
+    createdMaterialId = created.id;
 
+    const res = await DELETE(
+      createRequest(`http://localhost/api/materials/${createdMaterialId}`, 'DELETE'),
+      { params: Promise.resolve({ id: createdMaterialId }) },
+    );
     expect(res.status).toBe(204);
 
-    const getRes = await fetch(`${BASE_URL}/${createdMaterialId}`);
+    const getRes = await GET_BY_ID(
+      createRequest(`http://localhost/api/materials/${createdMaterialId}`, 'GET'),
+      { params: Promise.resolve({ id: createdMaterialId }) },
+    );
     expect(getRes.status).toBe(404);
 
     createdMaterialId = '';

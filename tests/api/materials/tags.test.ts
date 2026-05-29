@@ -20,7 +20,7 @@ describe('GET /api/materials/tags', () => {
     const tag1 = await db.materialTag.create({
       data: { name: 'Marketing', color: '#ff0000' },
     });
-    const tag2 = await db.materialTag.create({
+    await db.materialTag.create({
       data: { name: 'Tutorial' },
     });
 

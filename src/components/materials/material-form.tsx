@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TiptapEditor } from "./tiptap-editor"
+import { FileUploader } from "./file-uploader"
 
 type MaterialType = "COPY" | "TOPIC" | "VIDEO" | "IMAGE" | "AUDIO" | "IDEA" | "REFERENCE"
 type IdeaStatus = "DRAFT" | "ADOPTED" | "DISCARDED"
@@ -39,7 +40,8 @@ export function MaterialForm({
   const [ideaStatus, setIdeaStatus] = useState<IdeaStatus>(
     initialData?.ideaStatus || "DRAFT"
   )
-  const [file, setFile] = useState<File | null>(null)
+  const [fileKey, setFileKey] = useState<string | undefined>(initialData?.fileKey)
+  const [fileUrl, setFileUrl] = useState<string | undefined>(initialData?.url)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleAddTag = () => {
@@ -62,7 +64,8 @@ export function MaterialForm({
         title,
         content: type === "COPY" || type === "TOPIC" || type === "REFERENCE" ? content : undefined,
         tags,
-        url: type === "REFERENCE" ? url : undefined,
+        fileKey: type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileKey : undefined,
+        url: type === "REFERENCE" ? url : type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileUrl : undefined,
         ideaStatus: type === "IDEA" ? ideaStatus : undefined,
       })
     } finally {
@@ -102,28 +105,13 @@ export function MaterialForm({
       case "IMAGE":
       case "AUDIO":
         return (
-          <div className="space-y-2">
-            <Label htmlFor="file">
-              {type === "VIDEO" ? "视频文件" : type === "IMAGE" ? "图片文件" : "音频文件"}
-            </Label>
-            <Input
-              id="file"
-              type="file"
-              accept={
-                type === "VIDEO"
-                  ? "video/*"
-                  : type === "IMAGE"
-                  ? "image/*"
-                  : "audio/*"
-              }
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
-            {file && (
-              <p className="text-xs text-muted-foreground">
-                已选择: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
-            )}
-          </div>
+          <FileUploader
+            type={type}
+            onUploadComplete={(result) => {
+              setFileKey(result.key)
+              setFileUrl(result.url)
+            }}
+          />
         )
 
       case "IDEA":

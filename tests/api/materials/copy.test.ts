@@ -48,7 +48,7 @@ describe('COPY Material CRUD API', () => {
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBeGreaterThan(0);
-    const copyMaterial = data.find((m: any) => m.id === createdMaterialId);
+    const copyMaterial = data.find((m: { id: string }) => m.id === createdMaterialId);
     expect(copyMaterial).toBeDefined();
     expect(copyMaterial.type).toBe(MaterialType.COPY);
   });
