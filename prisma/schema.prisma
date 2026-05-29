@@ -12,3 +12,29 @@ model Setting {
   value     Json
   updatedAt DateTime @updatedAt
 }
+
+enum Platform {
+  DOUYIN
+}
+
+enum CookieStatus {
+  ACTIVE
+  EXPIRED
+  INVALID
+}
+
+model PlatformAccount {
+  id              String       @id @default(cuid())
+  platform        Platform
+  nickname        String
+  avatar          String?
+  secUid          String       @unique
+  cookieEncrypted String
+  cookieStatus    CookieStatus @default(ACTIVE)
+  lastSyncAt      DateTime?
+  lastErrorAt     DateTime?
+  lastError       String?
+  createdAt       DateTime     @default(now())
+
+  @@index([platform, cookieStatus])
+}
