@@ -16,6 +16,9 @@ const EnvSchema = z.object({
   COS_SECRET_KEY: z.string().optional().default(''),
   COS_BUCKET: z.string().optional().default(''),
   COS_REGION: z.string().optional().default(''),
+  // Cron expression for the daily sync job. Defaults to 02:00 every day.
+  // Validated at runtime by node-cron (see src/lib/cron/index.ts).
+  SYNC_CRON: z.string().default('0 2 * * *'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
