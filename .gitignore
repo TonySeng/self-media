@@ -39,3 +39,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# self-media local data and secrets
+/data/
+.env
+.env.local
+.env.production
+.superpowers/
+!.env.example
+
+# editor
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# vitest / coverage
+/coverage/

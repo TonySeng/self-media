@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.production
+data
+docs
+.superpowers
+coverage
+*.md
+!README.md
