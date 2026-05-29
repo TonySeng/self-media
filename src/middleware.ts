@@ -9,6 +9,8 @@ function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (pathname.startsWith('/_next')) return true;
   if (pathname.startsWith('/favicon')) return true;
+  if (pathname.startsWith('/uploads/')) return true;
+  if (pathname.startsWith('/api/materials')) return true;
   return false;
 }
 
