@@ -36,7 +36,9 @@ model PlatformAccount {
   lastError       String?
   createdAt       DateTime     @default(now())
 
-  works Work[]
+  works           Work[]
+  accountMetrics  AccountMetric[]
+  syncJobs        SyncJob[]
 
   @@index([platform, cookieStatus])
 }
@@ -77,4 +79,46 @@ model WorkMetric {
   work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
 
   @@index([workId, snapshotAt])
+}
+
+enum SyncJobType {
+  FULL
+  INCREMENTAL
+  MANUAL
+}
+
+enum SyncJobStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+model AccountMetric {
+  id                String   @id @default(cuid())
+  platformAccountId String
+  snapshotAt        DateTime @default(now())
+  totalFans         Int
+  genderDist        Json?
+  ageDist           Json?
+  regionDist        Json?
+  rawData           Json
+
+  account PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+
+  @@index([platformAccountId, snapshotAt])
+}
+
+model SyncJob {
+  id                String        @id @default(cuid())
+  platformAccountId String
+  type              SyncJobType
+  status            SyncJobStatus @default(RUNNING)
+  startedAt         DateTime      @default(now())
+  finishedAt        DateTime?
+  error             String?
+  stats             Json?
+
+  account PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+
+  @@index([platformAccountId, startedAt])
 }
