@@ -49,6 +49,7 @@ export default function WorkDetailPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-6 p-6">
       <div className="flex gap-4">
         {data.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={data.coverUrl} alt="" className="h-40 w-72 rounded-lg object-cover" />
         )}
         <div>

@@ -49,6 +49,7 @@ export default function WorksPage() {
             <Card className="overflow-hidden p-0 transition-colors hover:border-primary">
               <div className="aspect-video bg-muted">
                 {it.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={it.coverUrl} alt="" className="h-full w-full object-cover" />
                 ) : null}
               </div>

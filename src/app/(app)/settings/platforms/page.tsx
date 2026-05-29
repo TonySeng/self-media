@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -89,6 +88,7 @@ export default function PlatformsPage() {
       <div className="space-y-3">
         {accounts.map((a) => (
           <Card key={a.id} className="flex items-center gap-4 p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={a.avatar ?? '/avatar-fallback.svg'} alt="" className="h-10 w-10 rounded-full" />
             <div className="flex-1">
               <div className="font-medium">{a.nickname}</div>
