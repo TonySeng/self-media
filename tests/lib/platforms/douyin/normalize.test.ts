@@ -36,7 +36,7 @@ describe('normalizeWorkList', () => {
       duration: 30000,
       coverUrl: 'https://example.com/cover.jpg',
     });
-    expect(out.works[0].publishedAt).toBeInstanceOf(Date);
+    expect(out.works[0]!.publishedAt).toBeInstanceOf(Date);
     expect(out.metrics[0]).toMatchObject({
       platformWorkId: '7300000000000000001',
       play: 1000,

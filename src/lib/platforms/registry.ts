@@ -7,5 +7,7 @@ const adapters: Record<Platform, PlatformAdapter> = {
 };
 
 export function getAdapter(platform: Platform): PlatformAdapter {
-  return adapters[platform];
+  const a = adapters[platform];
+  if (!a) throw new Error(`No adapter for platform: ${platform}`);
+  return a;
 }
