@@ -36,5 +36,45 @@ model PlatformAccount {
   lastError       String?
   createdAt       DateTime     @default(now())
 
+  works Work[]
+
   @@index([platform, cookieStatus])
+}
+
+model Work {
+  id                String   @id @default(cuid())
+  platformAccountId String
+  platformWorkId    String
+  title             String
+  description       String?
+  coverUrl          String?
+  videoUrl          String?
+  duration          Int?
+  publishedAt       DateTime
+  rawData           Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  account PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+  metrics WorkMetric[]
+
+  @@unique([platformAccountId, platformWorkId])
+  @@index([platformAccountId, publishedAt])
+}
+
+model WorkMetric {
+  id         String   @id @default(cuid())
+  workId     String
+  snapshotAt DateTime @default(now())
+  play       Int
+  like       Int
+  comment    Int
+  share      Int
+  collect    Int
+  finishRate Float?
+  rawData    Json
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@index([workId, snapshotAt])
 }
