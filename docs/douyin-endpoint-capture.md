@@ -10,13 +10,15 @@
    - **userInfo**：刷新首页，找请求路径含 `/web/api/media/user/info` 的 XHR
    - **workList**：进入"作品管理"，找路径含 `/web/api/media/aweme/list` 的 XHR
    - **workDetail**：点开任意作品详情，找路径含 `/web/api/media/aweme/detail` 的 XHR
+   - **commentList**：在作品详情页打开评论区，找路径含 `/web/api/media/comment/list` 的 XHR
    - **fansAnalysis**：进入"数据中心 → 粉丝"，找路径含 `creator/data/fans/distribution` 的 XHR
 4. 右键请求 → Copy → Copy URL，得到完整 URL（含所有 query）
 5. 把 URL 粘贴到 `src/lib/platforms/douyin/endpoints.ts` 对应字段的 `urlTemplate`
 6. 在 URL 中找到表示动态参数的 query，替换为占位：
    - `sec_user_id=...` → `sec_user_id={secUid}`
    - `max_cursor=...` → `max_cursor={maxCursor}`
-   - `aweme_id=...` → `aweme_id={awemeId}`
+   - `aweme_id=...` / `item_id=...` → `aweme_id={awemeId}` / `item_id={awemeId}`
+   - `cursor=...`（评论分页） → `cursor={cursor}`
    - 其余 `_signature` / `X-Bogus` / `msToken` / `a_bogus` **保持原值**
 
 ## 何时需要重抓

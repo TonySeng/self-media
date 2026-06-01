@@ -9,8 +9,14 @@ const NAV = [
   { href: '/dashboard', label: '仪表盘' },
   { href: '/works', label: '作品' },
   { href: '/materials', label: '素材库' },
-  { href: '/ai-chat', label: 'AI 对话' },
-  { href: '/ai-history', label: 'AI 历史' },
+  { href: '/benchmark-accounts', label: '对标账号' },
+  { href: '/ai/chat', label: 'AI 对话' },
+  { href: '/ai/topic-suggest', label: 'AI 选题' },
+  { href: '/ai/copy-optimize', label: 'AI 文案' },
+  { href: '/ai/works-compare', label: 'AI 对比' },
+  { href: '/ai/trend', label: 'AI 趋势' },
+  { href: '/ai/benchmark', label: 'AI 对标' },
+  { href: '/ai/history', label: 'AI 历史' },
   { href: '/settings', label: '设置' },
 ];
 

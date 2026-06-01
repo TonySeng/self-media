@@ -6,7 +6,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
   const accountId = url.searchParams.get('accountId') ?? undefined;
   const q = url.searchParams.get('q') ?? undefined;
-  const limit = Math.min(Number(url.searchParams.get('limit') ?? '20') || 20, 100);
+  const limit = Math.min(Number(url.searchParams.get('limit') ?? '100') || 100, 100);
 
   const items = await db.work.findMany({
     where: {

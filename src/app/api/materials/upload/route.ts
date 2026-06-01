@@ -62,7 +62,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const storage = getStorageProvider();
+    const storage = await getStorageProvider();
     const result = await storage.upload(buffer, file.name, type);
     const url = storage.getUrl(result.key);
 

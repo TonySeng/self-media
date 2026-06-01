@@ -1,6 +1,7 @@
 import type {
   StandardizedAccountInfo,
   StandardizedAccountMetric,
+  StandardizedComment,
   StandardizedWork,
   StandardizedWorkMetric,
 } from '../types';
@@ -85,7 +86,12 @@ export function normalizeWorkList(raw: unknown): {
   const metrics: StandardizedWorkMetric[] = [];
   for (const item of list) {
     if (item && typeof item === 'object') {
-      const { work, metric } = normalizeAweme(item as Record<string, unknown>);
+      const aweme = item as Record<string, unknown>;
+      const timer = aweme.timer as Record<string, unknown> | undefined;
+      if (timer && typeof timer.status === 'number' && timer.status !== 1) {
+        continue;
+      }
+      const { work, metric } = normalizeAweme(aweme);
       works.push(work);
       metrics.push(metric);
     }
@@ -112,5 +118,134 @@ export function normalizeFansAnalysis(raw: unknown): StandardizedAccountMetric {
     ageDist: data.age_distribution ?? null,
     regionDist: data.region_distribution ?? null,
     rawData: data,
+  };
+}
+
+export function normalizeCommentList(raw: unknown): {
+  comments: StandardizedComment[];
+  hasMore: boolean;
+  cursor: number;
+} {
+  const obj = expectOk(raw);
+  const list = Array.isArray(obj.comments) ? obj.comments : [];
+  const comments: StandardizedComment[] = [];
+
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const c = item as Record<string, unknown>;
+    const user = (c.user ?? {}) as Record<string, unknown>;
+
+    comments.push({
+      platformCommentId: asString(c.cid),
+      content: asString(c.text),
+      authorName: asString(user.nickname),
+      authorAvatar: pickUrl(user.avatar_thumb),
+      authorUid: typeof user.uid === 'string' ? user.uid : null,
+      likeCount: asNumber(c.digg_count),
+      replyCount: asNumber(c.reply_comment_total),
+      publishedAt: new Date(asNumber(c.create_time) * 1000),
+      rawData: c,
+    });
+  }
+
+  return {
+    comments,
+    hasMore: Boolean(obj.has_more),
+    cursor: asNumber(obj.cursor),
+  };
+}
+
+/**
+ * 公开主页 - 对标账号信息
+ *
+ * 字段位置：response.user.{nickname, avatar_thumb, sec_uid, follower_count, signature, ...}
+ */
+export type StandardizedBenchmarkAccount = {
+  secUid: string;
+  nickname: string;
+  avatar: string | null;
+  followers: number;
+  signature: string | null;
+};
+
+export function normalizePublicUserInfo(
+  raw: unknown,
+): StandardizedBenchmarkAccount {
+  const obj = expectOk(raw);
+  const user = obj.user as Record<string, unknown> | null;
+  if (!user) throw new Error('user field missing');
+
+  return {
+    secUid: asString(user.sec_uid),
+    nickname: asString(user.nickname),
+    avatar: pickUrl(user.avatar_thumb),
+    followers: asNumber(user.follower_count),
+    signature:
+      typeof user.signature === 'string' && user.signature
+        ? user.signature
+        : null,
+  };
+}
+
+/**
+ * 公开主页 - 对标账号作品（含数据快照）
+ */
+export type StandardizedBenchmarkWork = {
+  platformWorkId: string;
+  title: string;
+  description: string | null;
+  url: string;
+  coverUrl: string | null;
+  duration: number | null;
+  publishedAt: Date;
+  play: number;
+  like: number;
+  comment: number;
+  share: number;
+  collect: number;
+  rawData: unknown;
+};
+
+export function normalizePublicAwemeList(raw: unknown): {
+  works: StandardizedBenchmarkWork[];
+  hasMore: boolean;
+  maxCursor: number;
+} {
+  const obj = expectOk(raw);
+  const list = Array.isArray(obj.aweme_list) ? obj.aweme_list : [];
+  const works: StandardizedBenchmarkWork[] = [];
+
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const aweme = item as Record<string, unknown>;
+    const id = asString(aweme.aweme_id);
+    if (!id) continue;
+
+    const video = (aweme.video ?? {}) as Record<string, unknown>;
+    const stats = (aweme.statistics ?? {}) as Record<string, unknown>;
+    const desc = asString(aweme.desc);
+    const createTime = asNumber(aweme.create_time);
+
+    works.push({
+      platformWorkId: id,
+      title: desc.split('\n')[0]?.slice(0, 100) || '（无标题）',
+      description: desc || null,
+      url: `https://www.douyin.com/video/${id}`,
+      coverUrl: pickUrl(video.cover) || pickUrl(video.origin_cover),
+      duration: aweme.duration === undefined ? null : asNumber(aweme.duration),
+      publishedAt: new Date(createTime * 1000),
+      play: asNumber(stats.play_count),
+      like: asNumber(stats.digg_count),
+      comment: asNumber(stats.comment_count),
+      share: asNumber(stats.share_count),
+      collect: asNumber(stats.collect_count),
+      rawData: aweme,
+    });
+  }
+
+  return {
+    works,
+    hasMore: Boolean(obj.has_more),
+    maxCursor: asNumber(obj.max_cursor),
   };
 }

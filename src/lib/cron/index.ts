@@ -1,43 +1,234 @@
 import cron from 'node-cron';
 import { db } from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
 import { runSync } from '@/lib/platforms/douyin/sync';
+import { syncWorkComments } from '@/lib/platforms/douyin/comment-sync';
+import { syncBenchmarkWorks } from '@/lib/platforms/douyin/benchmark-sync';
 
-let started = false;
+let task: ReturnType<typeof cron.schedule> | null = null;
+let currentExpr: string | null = null;
+
+const DEFAULT_CRON = '0 2 * * *';
+
+type SyncConfig = {
+  cronExpr: string;
+  enabled: boolean;
+  syncComments: boolean;
+  commentTopWorks: number;
+  syncBenchmarks: boolean;
+  benchmarkMaxPages: number;
+  benchmarkCookieFromAccountId: string | null;
+};
+
+const DEFAULT_CONFIG: SyncConfig = {
+  cronExpr: DEFAULT_CRON,
+  enabled: true,
+  syncComments: false,
+  commentTopWorks: 5,
+  syncBenchmarks: false,
+  benchmarkMaxPages: 5,
+  benchmarkCookieFromAccountId: null,
+};
 
 /**
- * Register the daily incremental-sync cron job.
- *
- * Idempotent: subsequent calls within the same Node.js process are no-ops,
- * which matters because Next.js' `register()` may run more than once during
- * dev (e.g. on HMR-triggered reloads of `instrumentation.ts`).
- *
- * Reads the cron expression from `process.env.SYNC_CRON` (defaults to
- * `0 2 * * *` — every day at 02:00). Invalid expressions are logged and the
- * job is skipped instead of crashing the server.
+ * 从 Setting 表读取同步配置
  */
-export function startCron(): void {
-  if (started) return;
-  started = true;
+async function loadSyncConfig(): Promise<SyncConfig> {
+  const setting = await db.setting.findUnique({
+    where: { key: 'sync_config' },
+  });
 
-  const expr = process.env.SYNC_CRON ?? '0 2 * * *';
-  if (!cron.validate(expr)) {
-    console.warn(`[cron] invalid SYNC_CRON="${expr}", skipping`);
+  if (!setting?.value || typeof setting.value !== 'object') {
+    return { ...DEFAULT_CONFIG };
+  }
+
+  const v = setting.value as Record<string, unknown>;
+  return {
+    cronExpr:
+      typeof v.cronExpr === 'string' && v.cronExpr ? v.cronExpr : DEFAULT_CRON,
+    enabled: v.enabled !== false,
+    syncComments: v.syncComments === true,
+    commentTopWorks:
+      typeof v.commentTopWorks === 'number' && v.commentTopWorks > 0
+        ? Math.min(v.commentTopWorks, 50)
+        : DEFAULT_CONFIG.commentTopWorks,
+    syncBenchmarks: v.syncBenchmarks === true,
+    benchmarkMaxPages:
+      typeof v.benchmarkMaxPages === 'number' && v.benchmarkMaxPages > 0
+        ? Math.min(v.benchmarkMaxPages, 200)
+        : DEFAULT_CONFIG.benchmarkMaxPages,
+    benchmarkCookieFromAccountId:
+      typeof v.benchmarkCookieFromAccountId === 'string' &&
+      v.benchmarkCookieFromAccountId
+        ? v.benchmarkCookieFromAccountId
+        : null,
+  };
+}
+
+/**
+ * 执行一次完整的同步流程（所有账号）
+ */
+export async function runFullSync(): Promise<{
+  accounts: number;
+  accountsFailed: number;
+  worksTouched: number;
+  commentWorksOk: number;
+  commentWorksFailed: number;
+  commentsTouched: number;
+  benchmarksOk: number;
+  benchmarksFailed: number;
+  benchmarkWorksTouched: number;
+}> {
+  const config = await loadSyncConfig();
+  const accounts = await db.platformAccount.findMany({
+    where: { platform: 'DOUYIN', cookieStatus: { not: 'INVALID' } },
+    select: { id: true, nickname: true },
+  });
+
+  let accountsFailed = 0;
+  let worksTouched = 0;
+  let commentWorksOk = 0;
+  let commentWorksFailed = 0;
+  let commentsTouched = 0;
+  let benchmarksOk = 0;
+  let benchmarksFailed = 0;
+  let benchmarkWorksTouched = 0;
+
+  for (const a of accounts) {
+    let job;
+    try {
+      job = await runSync(a.id, 'INCREMENTAL');
+    } catch (e) {
+      accountsFailed++;
+      console.error(`[cron] sync ${a.nickname} failed:`, e);
+      continue;
+    }
+
+    const stats = (job.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.worksTouched === 'number') {
+      worksTouched += stats.worksTouched;
+    }
+
+    if (!config.syncComments) continue;
+
+    // 同步该账号的 Top N 作品的评论（按播放量）
+    const topWorks = await db.work.findMany({
+      where: { platformAccountId: a.id },
+      include: {
+        metrics: { orderBy: { snapshotAt: 'desc' }, take: 1 },
+      },
+      take: 100,
+    });
+
+    const sortedTop = topWorks
+      .filter((w) => w.metrics[0])
+      .sort((x, y) => (y.metrics[0]?.play || 0) - (x.metrics[0]?.play || 0))
+      .slice(0, config.commentTopWorks);
+
+    for (const w of sortedTop) {
+      try {
+        const result = await syncWorkComments(w.id, 5);
+        commentWorksOk++;
+        commentsTouched += result.fetched;
+      } catch (e) {
+        commentWorksFailed++;
+        console.error(`[cron] sync comments for "${w.title}" failed:`, e);
+      }
+    }
+  }
+
+  // 同步对标账号
+  if (config.syncBenchmarks) {
+    const benchmarks = await db.benchmarkAccount.findMany({
+      where: { platform: 'DOUYIN', secUid: { not: null } },
+      select: { id: true, nickname: true },
+    });
+
+    let cookie: string | undefined;
+    if (config.benchmarkCookieFromAccountId) {
+      const acc = await db.platformAccount.findUnique({
+        where: { id: config.benchmarkCookieFromAccountId },
+      });
+      if (acc) cookie = decrypt(acc.cookieEncrypted);
+    }
+
+    for (const b of benchmarks) {
+      try {
+        const result = await syncBenchmarkWorks(b.id, cookie, {
+          incremental: true,
+          maxPages: config.benchmarkMaxPages,
+        });
+        benchmarksOk++;
+        benchmarkWorksTouched += result.fetched;
+      } catch (e) {
+        benchmarksFailed++;
+        console.error(`[cron] sync benchmark ${b.nickname} failed:`, e);
+      }
+    }
+  }
+
+  return {
+    accounts: accounts.length,
+    accountsFailed,
+    worksTouched,
+    commentWorksOk,
+    commentWorksFailed,
+    commentsTouched,
+    benchmarksOk,
+    benchmarksFailed,
+    benchmarkWorksTouched,
+  };
+}
+
+/**
+ * 启动或重启 cron 任务（基于 Setting 表中的配置）
+ *
+ * 幂等：相同表达式重复调用不会重复注册；表达式变了会先停旧任务再注册新的。
+ */
+export async function startCron(): Promise<void> {
+  const config = await loadSyncConfig();
+
+  if (!config.enabled) {
+    if (task) {
+      task.stop();
+      task = null;
+      currentExpr = null;
+      console.log('[cron] disabled, task stopped');
+    }
     return;
   }
 
-  cron.schedule(expr, async () => {
-    const accounts = await db.platformAccount.findMany({
-      where: { platform: 'DOUYIN', cookieStatus: { not: 'INVALID' } },
-      select: { id: true, nickname: true },
-    });
-    for (const a of accounts) {
-      try {
-        await runSync(a.id, 'INCREMENTAL');
-      } catch (e) {
-        console.error(`[cron] sync ${a.nickname} failed:`, e);
-      }
+  if (!cron.validate(config.cronExpr)) {
+    console.warn(`[cron] invalid cronExpr="${config.cronExpr}", skipping`);
+    return;
+  }
+
+  if (task && currentExpr === config.cronExpr) {
+    return;
+  }
+
+  if (task) {
+    task.stop();
+    task = null;
+  }
+
+  task = cron.schedule(config.cronExpr, async () => {
+    console.log('[cron] daily sync started');
+    try {
+      const result = await runFullSync();
+      console.log('[cron] daily sync finished:', result);
+    } catch (e) {
+      console.error('[cron] daily sync failed:', e);
     }
   });
 
-  console.log(`[cron] scheduled daily sync at "${expr}"`);
+  currentExpr = config.cronExpr;
+  console.log(`[cron] scheduled daily sync at "${config.cronExpr}"`);
+}
+
+/**
+ * 配置变更后调用，重新加载 cron 任务
+ */
+export async function reloadCron(): Promise<void> {
+  await startCron();
 }

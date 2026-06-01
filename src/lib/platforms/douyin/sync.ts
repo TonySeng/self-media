@@ -22,7 +22,14 @@ export async function runSync(accountId: string, type: SyncJobType): Promise<Syn
   });
 
   try {
-    const { works, metrics } = await listWorks(cookie, account.secUid);
+    // 增量模式：遇到比 lastSyncAt 更早的作品就提前停翻页（留 1 小时缓冲，防止边界误判）
+    const stopBefore =
+      type === 'INCREMENTAL' && account.lastSyncAt
+        ? new Date(account.lastSyncAt.getTime() - 60 * 60 * 1000)
+        : undefined;
+    const { works, metrics } = await listWorks(cookie, account.secUid, {
+      stopBefore,
+    });
     await sleep(randomDelayMs());
     const fans = await getFansAnalysis(cookie);
 

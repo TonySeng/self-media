@@ -11,14 +11,14 @@ type Material = {
   type: MaterialType;
   title: string;
   createdAt: string;
-  tags: { id: string; name: string; color: string | null }[];
+  tags?: { id: string; name: string; color: string | null }[];
 };
 
 type Tag = {
   id: string;
   name: string;
   color: string | null;
-  count: number;
+  usageCount: number;
 };
 
 const TYPE_LABELS: Record<MaterialType | 'ALL', string> = {
@@ -59,16 +59,16 @@ export default function MaterialsPage() {
 
     const res = await fetch(url);
     if (res.ok) {
-      const data = (await res.json()) as { items: Material[] };
-      setMaterials(data.items);
+      const data = (await res.json()) as Material[];
+      setMaterials(data);
     }
   }
 
   async function fetchTags() {
     const res = await fetch('/api/materials/tags');
     if (res.ok) {
-      const data = (await res.json()) as { items: Tag[] };
-      setTags(data.items);
+      const data = (await res.json()) as { tags: Tag[] };
+      setTags(data.tags);
     }
   }
 
@@ -113,7 +113,7 @@ export default function MaterialsPage() {
             >
               <div className="flex items-center justify-between">
                 <span>{tag.name}</span>
-                <span className="text-xs opacity-70">{tag.count}</span>
+                <span className="text-xs opacity-70">{tag.usageCount}</span>
               </div>
             </button>
           ))}
@@ -158,7 +158,7 @@ export default function MaterialsPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex flex-wrap gap-1">
-                  {material.tags.map((tag) => (
+                  {(material.tags ?? []).map((tag) => (
                     <span
                       key={tag.id}
                       className="rounded-full px-2 py-0.5 text-xs"

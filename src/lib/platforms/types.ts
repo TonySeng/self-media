@@ -36,6 +36,18 @@ export type StandardizedAccountMetric = {
   rawData: unknown;
 };
 
+export type StandardizedComment = {
+  platformCommentId: string;
+  content: string;
+  authorName: string;
+  authorAvatar: string | null;
+  authorUid: string | null;
+  likeCount: number;
+  replyCount: number;
+  publishedAt: Date;
+  rawData: unknown;
+};
+
 export type CookieValidationResult =
   | { ok: true; account: StandardizedAccountInfo }
   | { ok: false; reason: 'expired' | 'invalid'; message: string };
