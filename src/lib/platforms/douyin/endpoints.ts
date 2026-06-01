@@ -10,8 +10,12 @@
  *
  * 如果 sessionid_ss 仍有效但接口返回签名失败（status 0 / data null），
  * 通常是 msToken/a_bogus 已过期，重抓即可。
+ *
+ * 本地开发：复制 endpoints.local.example.ts 为 endpoints.local.ts，填入真实抓包参数。
+ * endpoints.local.ts 已在 .gitignore 中，不会被提交。
  */
-export const DOUYIN_ENDPOINTS = {
+
+const BASE_ENDPOINTS = {
   /** 用户信息（也用于 Cookie 健康检查） */
   userInfo: {
     urlTemplate: 'https://creator.douyin.com/aweme/v1/creator/check/user/?sec_uid={secUid}&msToken={msToken}&a_bogus={aBogus}',
@@ -59,6 +63,17 @@ export const DOUYIN_ENDPOINTS = {
     pageSize: 18,
   },
 } as const;
+
+// 尝试加载本地覆盖配置（包含真实抓包参数）
+let LOCAL_ENDPOINTS: typeof BASE_ENDPOINTS | null = null;
+try {
+  // @ts-expect-error - dynamic import of optional local file
+  LOCAL_ENDPOINTS = await import('./endpoints.local.ts').then(m => m.DOUYIN_ENDPOINTS);
+} catch {
+  // endpoints.local.ts 不存在或加载失败，使用占位符版本
+}
+
+export const DOUYIN_ENDPOINTS = LOCAL_ENDPOINTS ?? BASE_ENDPOINTS;
 
 export function fillTemplate(
   tpl: string,
