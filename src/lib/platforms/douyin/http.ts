@@ -9,6 +9,7 @@ export type DouyinFetchOptions = {
   method?: 'GET' | 'POST';
   body?: string;
   headers?: Record<string, string>;
+  referer?: string;
   maxRetries?: number;
   retryDelayMs?: number;
 };
@@ -40,12 +41,14 @@ export async function douyinFetch(url: string, opts: DouyinFetchOptions): Promis
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const isPublic = url.includes('www.douyin.com');
+      const referer = opts.referer ?? (isPublic ? 'https://www.douyin.com/' : 'https://creator.douyin.com/');
       const res = await request(url, {
         method: opts.method ?? 'GET',
         headers: {
           'User-Agent': UA,
-          Referer: 'https://creator.douyin.com/',
-          Cookie: opts.cookie,
+          Referer: referer,
+          ...(opts.cookie ? { Cookie: opts.cookie } : {}),
           Accept: 'application/json, text/plain, */*',
           ...(opts.headers ?? {}),
         },
