@@ -55,6 +55,7 @@ model PlatformAccount {
   works           Work[]
   accountMetrics  AccountMetric[]
   syncJobs        SyncJob[]
+  publishes       Publish[]
 
   @@index([platform, cookieStatus])
 }
@@ -177,6 +178,7 @@ model Material {
 
   tags  MaterialTag[]
   works Work[]        @relation("MaterialToWork")
+  publishes Publish[]
 
   @@index([type, createdAt])
   @@index([type, ideaStatus])
@@ -336,4 +338,36 @@ model AIChatMessage {
   chat        AIChat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@index([chatId, createdAt])
+}
+
+// === 发布任务 (Douyin Auto-Upload) ===
+
+enum PublishStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+model Publish {
+  id                String        @id @default(cuid())
+  platformAccountId String
+  materialId        String
+  title             String
+  description       String?       @db.Text
+  coverKey          String?
+  status            PublishStatus @default(PENDING)
+  error             String?       @db.Text
+  screenshotKey     String?
+  publishedWorkId   String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime      @default(now())
+
+  account           PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+  material          Material        @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@index([platformAccountId, createdAt])
+  @@index([status, createdAt])
 }
