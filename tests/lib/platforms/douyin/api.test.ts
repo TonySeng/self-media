@@ -25,7 +25,7 @@ afterEach(async () => {
 describe('douyinAdapter.validateCookie', () => {
   it('returns ok=true with account info on 200', async () => {
     const pool = agent.get('https://creator.douyin.com');
-    pool.intercept({ path: /\/web\/api\/media\/user\/info/, method: 'GET' })
+    pool.intercept({ path: /\/aweme\/v1\/creator\/check\/user\//, method: 'GET' })
       .reply(200, JSON.parse(fixture('user-info.json')), {
         headers: { 'content-type': 'application/json' },
       });
@@ -42,7 +42,7 @@ describe('douyinAdapter.validateCookie', () => {
 
   it('returns ok=false with reason=expired on 401/403', async () => {
     const pool = agent.get('https://creator.douyin.com');
-    pool.intercept({ path: /\/web\/api\/media\/user\/info/, method: 'GET' })
+    pool.intercept({ path: /\/aweme\/v1\/creator\/check\/user\//, method: 'GET' })
       .reply(401, '');
     const r = await douyinAdapter.validateCookie('sessionid_ss=stale');
     expect(r.ok).toBe(false);
