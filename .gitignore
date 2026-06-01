@@ -48,6 +48,9 @@ next-env.d.ts
 .superpowers/
 !.env.example
 
+# douyin endpoints with real tokens (抓包参数本地文件)
+src/lib/platforms/douyin/endpoints.local.ts
+
 # editor
 .idea/
 .claude/
