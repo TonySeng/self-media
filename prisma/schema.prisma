@@ -75,6 +75,7 @@ model Work {
 
   account   PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
   metrics   WorkMetric[]
+  comments  WorkComment[]
   materials Material[]      @relation("MaterialToWork")
 
   @@unique([platformAccountId, platformWorkId])
@@ -96,6 +97,27 @@ model WorkMetric {
   work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
 
   @@index([workId, snapshotAt])
+}
+
+model WorkComment {
+  id                String   @id @default(cuid())
+  workId            String
+  platformCommentId String
+  content           String   @db.Text
+  authorName        String
+  authorAvatar      String?
+  authorUid         String?
+  likeCount         Int      @default(0)
+  replyCount        Int      @default(0)
+  publishedAt       DateTime
+  rawData           Json
+  createdAt         DateTime @default(now())
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, platformCommentId])
+  @@index([workId, publishedAt])
+  @@index([workId, likeCount])
 }
 
 enum SyncJobType {
@@ -167,4 +189,151 @@ model MaterialTag {
   createdAt DateTime @default(now())
 
   materials Material[]
+}
+
+// === 对标账号（手动录入的外部爆款账号） ===
+
+model BenchmarkAccount {
+  id          String           @id @default(cuid())
+  platform    Platform
+  nickname    String           // 对标账号昵称
+  avatar      String?          // 头像 URL
+  secUid      String?          // 平台唯一 ID（用于拉取数据）
+  url         String?          // 主页链接
+  niche       String?          // 账号定位
+  followers   Int?             // 粉丝数（手动录入快照）
+  notes       String?          @db.Text  // 备注、运营观察
+  lastSyncAt  DateTime?        // 上次自动同步时间
+  lastError   String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  works       BenchmarkWork[]
+
+  @@unique([platform, secUid])
+  @@index([platform, createdAt])
+}
+
+model BenchmarkWork {
+  id                  String           @id @default(cuid())
+  benchmarkAccountId  String
+  platformWorkId      String?          // 平台作品 ID（用于去重 / 增量同步）
+  title               String
+  url                 String?
+  coverUrl            String?
+  description         String?          @db.Text
+  duration            Int?
+  publishedAt         DateTime?
+  play                Int?
+  like                Int?
+  comment             Int?
+  share               Int?
+  collect             Int?
+  notes               String?          @db.Text
+  rawData             Json?            // 抖音原始 JSON
+  source              String           @default("MANUAL")  // MANUAL | DOUYIN_SYNC
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  account             BenchmarkAccount @relation(fields: [benchmarkAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([benchmarkAccountId, platformWorkId])
+  @@index([benchmarkAccountId, createdAt])
+  @@index([benchmarkAccountId, play])
+}
+
+// === AI Foundation (Plan 4a) ===
+
+enum AIAnalysisType {
+  WORK_REVIEW
+  TOPIC_SUGGEST
+  COPY_OPTIMIZE
+  WORKS_COMPARE
+  TREND
+  COMMENT_INSIGHT
+  BENCHMARK
+}
+
+enum AIAnalysisStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum AIChatRole {
+  SYSTEM
+  USER
+  ASSISTANT
+}
+
+model LLMProvider {
+  id                String   @id @default(cuid())
+  name              String
+  baseUrl           String
+  apiKeyEncrypted   String
+  defaultModel      String
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  analyses          AIAnalysis[]
+
+  @@index([enabled, createdAt])
+}
+
+model PromptTemplate {
+  id            String         @id @default(cuid())
+  type          AIAnalysisType @unique
+  systemPrompt  String         @db.Text
+  userTemplate  String         @db.Text
+  isCustomized  Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([type])
+}
+
+model AIAnalysis {
+  id             String           @id @default(cuid())
+  type           AIAnalysisType
+  targetRefs     Json
+  prompt         String           @db.Text
+  response       String?          @db.Text
+  modelUsed      String
+  llmProviderId  String
+  tokensUsed     Json?
+  status         AIAnalysisStatus @default(RUNNING)
+  error          String?
+  createdAt      DateTime         @default(now())
+  finishedAt     DateTime?
+
+  provider       LLMProvider      @relation(fields: [llmProviderId], references: [id], onDelete: Cascade)
+
+  @@index([type, createdAt])
+  @@index([status, createdAt])
+}
+
+model AIChat {
+  id        String           @id @default(cuid())
+  title     String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  messages  AIChatMessage[]
+
+  @@index([updatedAt])
+}
+
+model AIChatMessage {
+  id          String     @id @default(cuid())
+  chatId      String
+  role        AIChatRole
+  content     String     @db.Text
+  attachments Json?
+  tokensUsed  Json?
+  createdAt   DateTime   @default(now())
+
+  chat        AIChat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
 }
