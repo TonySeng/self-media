@@ -40,6 +40,7 @@ const portfinder = __importStar(require("portfinder"));
 let mainWindow = null;
 let nextProcess = null;
 let serverPort = 3000;
+const isDev = process.env.ELECTRON_DEV === '1';
 async function findPort() {
     return new Promise((resolve, reject) => {
         portfinder.getPort({ port: 3000 }, (err, port) => {
@@ -51,7 +52,13 @@ async function findPort() {
     });
 }
 async function startNextServer(port) {
-    // standalone 服务器路径（相对于 electron/dist/main.js → ../../.next/standalone）
+    if (isDev) {
+        // 开发模式：连接到已运行的 next dev（端口3000）
+        console.log(`[electron] dev mode — expecting Next.js at http://127.0.0.1:${port}`);
+        await new Promise((r) => setTimeout(r, 2000));
+        return;
+    }
+    // 生产模式：启动 standalone server
     const serverPath = path.join(__dirname, '..', '..', '.next', 'standalone', 'server.js');
     const dataDir = electron_1.app.getPath('userData');
     return new Promise((resolve, reject) => {
@@ -83,7 +90,6 @@ async function startNextServer(port) {
                 reject(err);
             }
         });
-        // 最多等待 20 秒后继续（Next.js 可能不打印特定就绪字符串）
         setTimeout(() => {
             if (!resolved) {
                 resolved = true;
@@ -109,10 +115,10 @@ function createWindow(port) {
     });
 }
 electron_1.app.whenReady().then(async () => {
-    serverPort = await findPort();
-    console.log(`[electron] starting Next.js on port ${serverPort}`);
+    serverPort = isDev ? 3000 : await findPort();
+    console.log(`[electron] starting on port ${serverPort}`);
     await startNextServer(serverPort);
-    console.log(`[electron] Next.js ready, opening window`);
+    console.log(`[electron] ready, opening window`);
     createWindow(serverPort);
     const { registerIpcHandlers } = await Promise.resolve().then(() => __importStar(require('./ipc-handlers')));
     registerIpcHandlers(electron_1.ipcMain);

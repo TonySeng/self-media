@@ -10,8 +10,9 @@ const CreateMaterialSchema = z.object({
   fileKey: z.string().optional(),
   fileSize: z.number().int().positive().optional(),
   fileMime: z.string().optional(),
-  url: z.string().url().optional(),
+  url: z.string().optional(),
   ideaStatus: z.nativeEnum(IdeaStatus).optional(),
+  platformAccountId: z.string().optional(),
 }).refine((data) => {
   if (data.type === MaterialType.COPY) {
     return data.content !== undefined && data.content.length > 0;
@@ -40,7 +41,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const { type, title, content, fileKey, fileSize, fileMime, url, ideaStatus } = parsed.data;
+  const { type, title, content, fileKey, fileSize, fileMime, url, ideaStatus, platformAccountId } = parsed.data;
 
   try {
     const material = await db.material.create({
@@ -53,6 +54,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         fileMime,
         url,
         ideaStatus,
+        platformAccountId,
       },
     });
 
@@ -69,19 +71,41 @@ export async function GET(req: Request): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get('type') as MaterialType | null;
   const ideaStatus = searchParams.get('ideaStatus') as IdeaStatus | null;
+  const tagId = searchParams.get('tagId');
+  const q = searchParams.get('q');
+  const accountId = searchParams.get('accountId');
 
-  const where: { type?: MaterialType; ideaStatus?: IdeaStatus } = {};
+  const where: {
+    type?: MaterialType;
+    ideaStatus?: IdeaStatus;
+    platformAccountId?: string | null;
+    tags?: { some: { id: string } };
+    title?: { contains: string };
+  } = {};
+
   if (type) {
     where.type = type;
   }
   if (ideaStatus) {
     where.ideaStatus = ideaStatus;
   }
+  if (accountId) {
+    where.platformAccountId = accountId;
+  }
+  if (tagId) {
+    where.tags = { some: { id: tagId } };
+  }
+  if (q) {
+    where.title = { contains: q };
+  }
 
   try {
     const materials = await db.material.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      include: {
+        tags: true,
+      },
     });
 
     return NextResponse.json(materials);

@@ -2,6 +2,7 @@
   "name": "self-media",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/dist/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:run": "ELECTRON_DEV=1 electron ."
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.48",

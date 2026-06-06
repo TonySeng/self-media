@@ -11,7 +11,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const items = await db.work.findMany({
     where: {
       ...(accountId ? { platformAccountId: accountId } : {}),
-      ...(q ? { title: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(q ? { title: { contains: q } } : {}),
     },
     orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
     take: limit,
