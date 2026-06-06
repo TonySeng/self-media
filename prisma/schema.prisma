@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -39,6 +39,12 @@ enum IdeaStatus {
   DISCARDED   // 已废弃
 }
 
+enum AutoReplyStatus {
+  REPLIED
+  SKIPPED
+  FAILED
+}
+
 model PlatformAccount {
   id              String       @id @default(cuid())
   platform        Platform
@@ -56,6 +62,7 @@ model PlatformAccount {
   accountMetrics  AccountMetric[]
   syncJobs        SyncJob[]
   publishes       Publish[]
+  materials       Material[]
 
   @@index([platform, cookieStatus])
 }
@@ -104,21 +111,29 @@ model WorkComment {
   id                String   @id @default(cuid())
   workId            String
   platformCommentId String
-  content           String   @db.Text
+  parentCommentId   String?  // 父评论的 platformCommentId（顶层评论为 null）
+  content           String
   authorName        String
   authorAvatar      String?
   authorUid         String?
+  isAuthorReply     Boolean  @default(false) // 是否为作者自己的回复
   likeCount         Int      @default(0)
   replyCount        Int      @default(0)
   publishedAt       DateTime
   rawData           Json
   createdAt         DateTime @default(now())
+  autoReplyStatus   AutoReplyStatus?
+  autoReplyContent  String?
+  autoReplyAt       DateTime?
+  autoReplyError    String?
 
   work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
 
   @@unique([workId, platformCommentId])
   @@index([workId, publishedAt])
   @@index([workId, likeCount])
+  @@index([workId, isAuthorReply])
+  @@index([workId, autoReplyStatus])
 }
 
 enum SyncJobType {
@@ -164,22 +179,25 @@ model SyncJob {
 }
 
 model Material {
-  id          String       @id @default(cuid())
-  type        MaterialType
-  title       String
-  content     String?      // COPY 富文本 HTML / TOPIC 描述 / REFERENCE 摘要
-  fileKey     String?      // VIDEO/IMAGE/AUDIO 文件路径（相对 storage root）
-  fileSize    Int?         // 字节
-  fileMime    String?      // MIME type
-  url         String?      // REFERENCE 外链
-  ideaStatus  IdeaStatus?  // IDEA 专用
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  platformAccountId String?      // 归属账号（可选，NULL 表示通用素材）
+  type              MaterialType
+  title             String
+  content           String?      // COPY 富文本 HTML / TOPIC 描述 / REFERENCE 摘要
+  fileKey           String?      // VIDEO/IMAGE/AUDIO 文件路径（相对 storage root）
+  fileSize          Int?         // 字节
+  fileMime          String?      // MIME type
+  url               String?      // REFERENCE 外链
+  ideaStatus        IdeaStatus?  // IDEA 专用
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  tags  MaterialTag[]
-  works Work[]        @relation("MaterialToWork")
+  account   PlatformAccount? @relation(fields: [platformAccountId], references: [id], onDelete: SetNull)
+  tags      MaterialTag[]
+  works     Work[]           @relation("MaterialToWork")
   publishes Publish[]
 
+  @@index([platformAccountId, type, createdAt])
   @@index([type, createdAt])
   @@index([type, ideaStatus])
 }
@@ -204,7 +222,7 @@ model BenchmarkAccount {
   url         String?          // 主页链接
   niche       String?          // 账号定位
   followers   Int?             // 粉丝数（手动录入快照）
-  notes       String?          @db.Text  // 备注、运营观察
+  notes       String?          // 备注、运营观察
   lastSyncAt  DateTime?        // 上次自动同步时间
   lastError   String?
   createdAt   DateTime         @default(now())
@@ -223,7 +241,7 @@ model BenchmarkWork {
   title               String
   url                 String?
   coverUrl            String?
-  description         String?          @db.Text
+  description         String?
   duration            Int?
   publishedAt         DateTime?
   play                Int?
@@ -231,7 +249,7 @@ model BenchmarkWork {
   comment             Int?
   share               Int?
   collect             Int?
-  notes               String?          @db.Text
+  notes               String?
   rawData             Json?            // 抖音原始 JSON
   source              String           @default("MANUAL")  // MANUAL | DOUYIN_SYNC
   createdAt           DateTime         @default(now())
@@ -253,6 +271,7 @@ enum AIAnalysisType {
   WORKS_COMPARE
   TREND
   COMMENT_INSIGHT
+  COMMENT_REPLY
   BENCHMARK
 }
 
@@ -286,8 +305,8 @@ model LLMProvider {
 model PromptTemplate {
   id            String         @id @default(cuid())
   type          AIAnalysisType @unique
-  systemPrompt  String         @db.Text
-  userTemplate  String         @db.Text
+  systemPrompt  String
+  userTemplate  String
   isCustomized  Boolean        @default(false)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -299,8 +318,8 @@ model AIAnalysis {
   id             String           @id @default(cuid())
   type           AIAnalysisType
   targetRefs     Json
-  prompt         String           @db.Text
-  response       String?          @db.Text
+  prompt         String
+  response       String?
   modelUsed      String
   llmProviderId  String
   tokensUsed     Json?
@@ -330,7 +349,7 @@ model AIChatMessage {
   id          String     @id @default(cuid())
   chatId      String
   role        AIChatRole
-  content     String     @db.Text
+  content     String
   attachments Json?
   tokensUsed  Json?
   createdAt   DateTime   @default(now())
@@ -355,10 +374,10 @@ model Publish {
   platformAccountId String
   materialId        String
   title             String
-  description       String?       @db.Text
+  description       String?
   coverKey          String?
   status            PublishStatus @default(PENDING)
-  error             String?       @db.Text
+  error             String?
   screenshotKey     String?
   publishedWorkId   String?
   startedAt         DateTime?
