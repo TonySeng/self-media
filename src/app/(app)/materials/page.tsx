@@ -1,15 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { MaterialType } from '@prisma/client';
+import { MaterialType, IdeaStatus } from '@prisma/client';
+import { PublishDialog } from '@/components/publish/publish-dialog';
+import { MaterialFormDialog } from '@/components/materials/material-form-dialog';
+import { IdeaBoard } from '@/components/materials/idea-board';
 
 type Material = {
   id: string;
   type: MaterialType;
   title: string;
+  content?: string | null;
+  fileKey?: string | null;
+  fileSize?: number | null;
+  fileMime?: string | null;
+  url?: string | null;
+  ideaStatus?: IdeaStatus | null;
   createdAt: string;
   tags?: { id: string; name: string; color: string | null }[];
 };
@@ -33,11 +43,25 @@ const TYPE_LABELS: Record<MaterialType | 'ALL', string> = {
 };
 
 export default function MaterialsPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">加载中...</p>}>
+      <MaterialsInner />
+    </Suspense>
+  );
+}
+
+function MaterialsInner() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [activeType, setActiveType] = useState<MaterialType | 'ALL'>('ALL');
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [publishTarget, setPublishTarget] = useState<{ id: string; title: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<Material | null>(null);
+  const [createType, setCreateType] = useState<MaterialType>('COPY');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const accountId = searchParams.get('accountId') || '';
 
   useEffect(() => {
     fetchTags();
@@ -49,13 +73,14 @@ export default function MaterialsPage() {
     }, 200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeType, selectedTagId, searchQuery]);
+  }, [activeType, selectedTagId, searchQuery, accountId]);
 
   async function fetchMaterials() {
     const url = new URL('/api/materials', window.location.origin);
     if (activeType !== 'ALL') url.searchParams.set('type', activeType);
     if (selectedTagId) url.searchParams.set('tagId', selectedTagId);
     if (searchQuery) url.searchParams.set('q', searchQuery);
+    if (accountId) url.searchParams.set('accountId', accountId);
 
     const res = await fetch(url);
     if (res.ok) {
@@ -72,16 +97,52 @@ export default function MaterialsPage() {
     }
   }
 
+  async function deleteMaterial(id: string) {
+    if (!confirm('确认删除该素材？')) return;
+    const res = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
+    if (res.ok) await fetchMaterials();
+  }
+
+  async function handleIdeaStatusChange(id: string, newStatus: IdeaStatus) {
+    await fetch(`/api/materials/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ideaStatus: newStatus }),
+    });
+    await fetchMaterials();
+  }
+
   if (activeType === 'IDEA') {
+    const ideasWithStatus = materials
+      .filter(
+        (m): m is Material & { ideaStatus: IdeaStatus } =>
+          m.ideaStatus !== null && m.ideaStatus !== undefined,
+      )
+      .map((m) => ({
+        id: m.id,
+        title: m.title,
+        ideaStatus: m.ideaStatus,
+        createdAt: m.createdAt,
+        tags: m.tags ?? [],
+      }));
     return (
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">素材库</h1>
-          <Button>新建素材</Button>
+          <h1 className="text-2xl font-semibold">创意看板</h1>
+          <Button onClick={() => { setCreateType('IDEA'); setCreateDialogOpen(true); }}>
+            新建创意
+          </Button>
         </div>
-        <div className="text-sm text-muted-foreground">
-          IDEA 看板视图将在 Task 15 中实现
-        </div>
+        <IdeaBoard
+          materials={ideasWithStatus}
+          onStatusChange={handleIdeaStatusChange}
+          onCardClick={() => {}}
+        />
+        <MaterialFormDialog
+          open={createDialogOpen}
+          onClose={() => { setCreateDialogOpen(false); void fetchMaterials(); }}
+          type="IDEA"
+        />
       </div>
     );
   }
@@ -130,7 +191,9 @@ export default function MaterialsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-60"
             />
-            <Button>新建素材</Button>
+            <Button onClick={() => { setCreateType(activeType === 'ALL' ? 'COPY' : activeType); setCreateDialogOpen(true); }}>
+              新建素材
+            </Button>
           </div>
         </div>
 
@@ -152,9 +215,20 @@ export default function MaterialsPage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {materials.map((material) => (
-            <Card key={material.id} className="cursor-pointer transition-colors hover:border-primary">
-              <CardHeader>
-                <CardTitle className="line-clamp-2">{material.title}</CardTitle>
+            <Card
+              key={material.id}
+              className="group cursor-pointer transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              onClick={() => setEditTarget(material)}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="line-clamp-2 text-sm font-medium leading-snug">
+                    {material.title}
+                  </CardTitle>
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {TYPE_LABELS[material.type]}
+                  </span>
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex flex-wrap gap-1">
@@ -171,8 +245,36 @@ export default function MaterialsPage() {
                     </span>
                   ))}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {new Date(material.createdAt).toLocaleDateString()}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(material.createdAt).toLocaleDateString()}
+                  </span>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    {material.type === 'VIDEO' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPublishTarget({ id: material.id, title: material.title });
+                        }}
+                      >
+                        发布
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteMaterial(material.id);
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -183,6 +285,38 @@ export default function MaterialsPage() {
             </p>
           )}
         </div>
+
+        <PublishDialog
+          open={!!publishTarget}
+          onClose={() => setPublishTarget(null)}
+          materialId={publishTarget?.id ?? ''}
+          materialTitle={publishTarget?.title ?? ''}
+        />
+
+        <MaterialFormDialog
+          open={createDialogOpen}
+          onClose={() => { setCreateDialogOpen(false); void fetchMaterials(); }}
+          type={createType}
+        />
+
+        {editTarget && (
+          <MaterialFormDialog
+            open={!!editTarget}
+            onClose={() => { setEditTarget(null); void fetchMaterials(); }}
+            type={editTarget.type}
+            materialId={editTarget.id}
+            initialData={{
+              title: editTarget.title,
+              content: editTarget.content ?? undefined,
+              tags: (editTarget.tags ?? []).map((t) => t.name),
+              fileKey: editTarget.fileKey ?? undefined,
+              fileSize: editTarget.fileSize ?? undefined,
+              fileMime: editTarget.fileMime ?? undefined,
+              url: editTarget.url ?? undefined,
+              ideaStatus: editTarget.ideaStatus ?? undefined,
+            }}
+          />
+        )}
       </main>
     </div>
   );

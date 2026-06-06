@@ -1,7 +1,13 @@
 import { db } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { douyinPublish } from '@/lib/platforms/douyin/upload';
+import { getEnv } from '@/lib/env';
 import * as path from 'node:path';
+
+function uploadsDir(): string {
+  const p = getEnv().LOCAL_STORAGE_PATH;
+  return path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
+}
 
 let busy = false;
 
@@ -37,11 +43,11 @@ export async function processNextPublish(): Promise<boolean> {
     if (!material || !material.fileKey) throw new Error('素材不存在或无文件');
 
     const cookie = decrypt(account.cookieEncrypted);
-    const videoPath = path.resolve(process.cwd(), 'data/uploads', material.fileKey);
+    const videoPath = path.join(uploadsDir(), material.fileKey);
 
     let coverPath: string | undefined;
     if (task.coverKey) {
-      coverPath = path.resolve(process.cwd(), 'data/uploads', task.coverKey);
+      coverPath = path.join(uploadsDir(), task.coverKey);
     }
 
     const result = await douyinPublish({

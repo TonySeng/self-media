@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execFileSync } from 'child_process';
 import Database from 'better-sqlite3';
 import { getMasterKey, decryptCookieValue } from './decrypt';
 
@@ -9,27 +10,50 @@ type RawCookieRow = {
   encrypted_value: Buffer;
 };
 
+/**
+ * Windows でロック中のファイルを共有読み取りでコピーする
+ * Node の fs.copyFileSync は Chrome がロックしている Cookies を開けないが、
+ * PowerShell の Copy-Item は FILE_SHARE_READ で開くため成功する。
+ */
+function copyLockedFile(src: string, dst: string): void {
+  const escSrc = src.replace(/'/g, "''");
+  const escDst = dst.replace(/'/g, "''");
+  execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `Copy-Item -LiteralPath '${escSrc}' -Destination '${escDst}' -Force`,
+    ],
+    { timeout: 10000 }
+  );
+}
+
 export async function readDouyinCookiesFromProfile(profilePath: string): Promise<string> {
-  const cookiesDbPath = path.join(profilePath, 'Cookies');
+  // Chrome v96+ は Cookies を Profile/Network/Cookies に置く。古い版は Profile/Cookies。
+  let cookiesDbPath = path.join(profilePath, 'Network', 'Cookies');
   if (!fs.existsSync(cookiesDbPath)) {
-    throw new Error(`未找到 Cookies 文件：${cookiesDbPath}`);
+    cookiesDbPath = path.join(profilePath, 'Cookies');
+  }
+  if (!fs.existsSync(cookiesDbPath)) {
+    throw new Error(`未找到 Cookies 文件：${profilePath}`);
   }
 
   const tmpPath = path.join(os.tmpdir(), `self-media-cookies-${Date.now()}.db`);
 
-  // 复制到临时文件（避免浏览器锁定），重试最多 3 次
-  let copied = false;
-  for (let i = 0; i < 3; i++) {
+  // まず通常のコピーを試し、ロックエラーなら PowerShell Copy-Item へフォールバック
+  try {
+    fs.copyFileSync(cookiesDbPath, tmpPath);
+  } catch (e) {
     try {
-      fs.copyFileSync(cookiesDbPath, tmpPath);
-      copied = true;
-      break;
+      copyLockedFile(cookiesDbPath, tmpPath);
     } catch {
-      if (i < 2) await new Promise((r) => setTimeout(r, 500));
+      throw new Error(
+        '无法读取 Chrome Cookies（被浏览器独占锁定）。请暂时关闭 Chrome 后重试，' +
+          '读取完成后可以重新打开 Chrome。这只需要几秒钟。'
+      );
     }
-  }
-  if (!copied) {
-    throw new Error('无法读取 Cookies 文件，请关闭浏览器后重试');
   }
 
   let cookieStr = '';

@@ -23,9 +23,18 @@ function asString(v: unknown, fallback = ''): string {
 }
 
 function expectOk(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== 'object') throw new Error('Empty response');
+  if (!payload || typeof payload !== 'object') {
+    console.error('[expectOk] Empty or non-object response:', payload);
+    throw new Error('Empty response');
+  }
   const obj = payload as Record<string, unknown>;
+  // 空对象 {} 很可能是风控，直接当错误处理
+  if (Object.keys(obj).length === 0) {
+    console.error('[expectOk] Empty object (likely rate-limited or blocked)');
+    throw new Error('Douyin returned empty response (rate limit or anti-bot)');
+  }
   if (typeof obj.status_code === 'number' && obj.status_code !== 0) {
+    console.error('[expectOk] non-zero status_code:', obj.status_code, 'full obj:', obj);
     throw new Error(`Douyin status_code=${obj.status_code}`);
   }
   return obj;
@@ -121,7 +130,7 @@ export function normalizeFansAnalysis(raw: unknown): StandardizedAccountMetric {
   };
 }
 
-export function normalizeCommentList(raw: unknown): {
+export function normalizeCommentList(raw: unknown, ownerUid?: string): {
   comments: StandardizedComment[];
   hasMore: boolean;
   cursor: number;
@@ -134,18 +143,46 @@ export function normalizeCommentList(raw: unknown): {
     if (!item || typeof item !== 'object') continue;
     const c = item as Record<string, unknown>;
     const user = (c.user ?? {}) as Record<string, unknown>;
+    const uid = typeof user.uid === 'string' ? user.uid : null;
+    const parentCid = asString(c.cid);
+    const labelText = typeof c.label_text === 'string' ? c.label_text : '';
 
     comments.push({
-      platformCommentId: asString(c.cid),
+      platformCommentId: parentCid,
+      parentCommentId: null,
       content: asString(c.text),
       authorName: asString(user.nickname),
       authorAvatar: pickUrl(user.avatar_thumb),
-      authorUid: typeof user.uid === 'string' ? user.uid : null,
+      authorUid: uid,
+      isAuthorReply: labelText === '作者' || !!(ownerUid && uid === ownerUid),
       likeCount: asNumber(c.digg_count),
       replyCount: asNumber(c.reply_comment_total),
       publishedAt: new Date(asNumber(c.create_time) * 1000),
       rawData: c,
     });
+
+    const replies = Array.isArray(c.reply_comment) ? c.reply_comment : [];
+    for (const reply of replies) {
+      if (!reply || typeof reply !== 'object') continue;
+      const r = reply as Record<string, unknown>;
+      const rUser = (r.user ?? {}) as Record<string, unknown>;
+      const rUid = typeof rUser.uid === 'string' ? rUser.uid : null;
+      const rLabelText = typeof r.label_text === 'string' ? r.label_text : '';
+
+      comments.push({
+        platformCommentId: asString(r.cid),
+        parentCommentId: parentCid,
+        content: asString(r.text),
+        authorName: asString(rUser.nickname),
+        authorAvatar: pickUrl(rUser.avatar_thumb),
+        authorUid: rUid,
+        isAuthorReply: rLabelText === '作者' || !!(ownerUid && rUid === ownerUid),
+        likeCount: asNumber(r.digg_count),
+        replyCount: 0,
+        publishedAt: new Date(asNumber(r.create_time) * 1000),
+        rawData: r,
+      });
+    }
   }
 
   return {
@@ -171,9 +208,14 @@ export type StandardizedBenchmarkAccount = {
 export function normalizePublicUserInfo(
   raw: unknown,
 ): StandardizedBenchmarkAccount {
+  console.log('[normalizePublicUserInfo] start, raw keys:', Object.keys(raw as object));
   const obj = expectOk(raw);
+  console.log('[normalizePublicUserInfo] expectOk passed, obj keys:', Object.keys(obj));
   const user = obj.user as Record<string, unknown> | null;
-  if (!user) throw new Error('user field missing');
+  if (!user) {
+    console.error('[normalizePublicUserInfo] user field missing, obj:', obj);
+    throw new Error('user field missing');
+  }
 
   return {
     secUid: asString(user.sec_uid),

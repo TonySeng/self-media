@@ -51,18 +51,19 @@ function getEncryptedKey(userDataDir) {
     return Buffer.from(encryptedKeyB64, 'base64').subarray(5);
 }
 function dpApiDecrypt(data) {
-    // 通过 PowerShell 调用 .NET DPAPI 解密
-    const hex = data.toString('hex');
+    // PowerShell 5 (Windows 10/11 デフォルト) は System.Security アセンブリを明示的にロードする必要がある
+    const b64 = data.toString('base64');
     const script = [
-        `$bytes = [System.Convert]::FromHexString('${hex}')`,
+        `Add-Type -AssemblyName System.Security`,
+        `$bytes = [System.Convert]::FromBase64String('${b64}')`,
         `$dec = [System.Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)`,
-        `[System.Convert]::ToHexString($dec)`,
+        `[System.Convert]::ToBase64String($dec)`,
     ].join('; ');
     const result = (0, child_process_1.execFileSync)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
         timeout: 15000,
         encoding: 'utf8',
     }).trim();
-    return Buffer.from(result, 'hex');
+    return Buffer.from(result, 'base64');
 }
 function getMasterKey(userDataDir) {
     const cached = keyCache.get(userDataDir);

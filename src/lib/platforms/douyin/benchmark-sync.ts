@@ -92,11 +92,15 @@ export async function syncBenchmarkWorks(
     throw new Error('对标账号缺少 secUid，无法自动同步。请通过"导入"重新创建。');
   }
 
-  // 增量：从上次同步前 1 小时算起
+  console.log('[syncBenchmarkWorks] options:', JSON.stringify(options), 'lastSyncAt:', account.lastSyncAt);
+
+  // 增量：拉取到上次同步时间点的作品就停（不拉旧作品）
   const stopBefore =
     options?.incremental && account.lastSyncAt
-      ? new Date(account.lastSyncAt.getTime() - 60 * 60 * 1000)
+      ? account.lastSyncAt
       : undefined;
+
+  console.log('[syncBenchmarkWorks] computed stopBefore:', stopBefore);
 
   // 全量同步默认翻 50 页（≈900 条），增量同步默认 5 页就够（最近一周新作品很少超过 90 条）
   const maxPages =

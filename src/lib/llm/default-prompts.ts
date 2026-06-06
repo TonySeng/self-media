@@ -48,6 +48,12 @@ export const DEFAULT_PROMPTS: Record<AIAnalysisType, DefaultPrompt> = {
     userTemplate:
       '账号：{{accountName}}\n\n对标爆款（{{benchmarkCount}} 个）：\n{{benchmarks}}\n\n本账号近期作品（{{ownCount}} 个）：\n{{ownWorks}}\n\n请输出对标分析报告。',
   },
+  COMMENT_REPLY: {
+    systemPrompt:
+      '你是抖音创作者的评论回复助手。基于作品内容和用户评论，生成一条**短小自然、有温度**的回复。要求：1) 不超过 50 字，最好 20-30 字 2) 语气亲切、轻松，像朋友间对话，不要官方腔 3) 针对评论内容做具体回应，避免"谢谢支持"这种空话 4) 不要使用过多 emoji（最多 1 个） 5) 直接输出回复内容，不要解释、不要加引号、不要任何前缀。',
+    userTemplate:
+      '作品标题：{{workTitle}}\n作品文案：{{workDesc}}\n\n用户评论（来自 {{authorName}}）：\n{{commentContent}}\n\n请生成一条回复。',
+  },
 };
 
 export function fillTemplate(

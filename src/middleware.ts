@@ -9,21 +9,45 @@ function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (pathname.startsWith('/_next')) return true;
   if (pathname.startsWith('/favicon')) return true;
-  if (pathname.startsWith('/uploads/')) return true;
+  if (pathname.startsWith('/api/uploads/')) return true;
   if (pathname.startsWith('/api/materials')) return true;
   return false;
 }
 
+function isChromeExtension(origin: string | null): boolean {
+  return !!origin && origin.startsWith('chrome-extension://');
+}
+
+function withCors(res: NextResponse, origin: string): NextResponse {
+  res.headers.set('Access-Control-Allow-Origin', origin);
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'content-type');
+  return res;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
+  const origin = req.headers.get('origin');
+
+  if (req.method === 'OPTIONS' && isChromeExtension(origin)) {
+    return withCors(new NextResponse(null, { status: 204 }), origin!);
+  }
+
+  if (isPublic(pathname)) {
+    const res = NextResponse.next();
+    if (isChromeExtension(origin)) withCors(res, origin!);
+    return res;
+  }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = token ? await verifySession(token) : null;
 
   if (!session) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      if (isChromeExtension(origin)) withCors(res, origin!);
+      return res;
     }
     const url = req.nextUrl.clone();
     url.pathname = '/login';
@@ -31,7 +55,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  if (isChromeExtension(origin)) withCors(res, origin!);
+  return res;
 }
 
 export const config = {

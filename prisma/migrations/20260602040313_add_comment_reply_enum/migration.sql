@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AIAnalysisType" ADD VALUE 'COMMENT_REPLY';

@@ -15,6 +15,8 @@ interface MaterialFormData {
   content?: string
   tags: string[]
   fileKey?: string
+  fileSize?: number
+  fileMime?: string
   url?: string
   ideaStatus?: IdeaStatus
 }
@@ -41,8 +43,11 @@ export function MaterialForm({
     initialData?.ideaStatus || "DRAFT"
   )
   const [fileKey, setFileKey] = useState<string | undefined>(initialData?.fileKey)
+  const [fileSize, setFileSize] = useState<number | undefined>(initialData?.fileSize)
+  const [fileMime, setFileMime] = useState<string | undefined>(initialData?.fileMime)
   const [fileUrl, setFileUrl] = useState<string | undefined>(initialData?.url)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
 
   const handleAddTag = () => {
     const trimmed = tagInput.trim()
@@ -58,6 +63,16 @@ export function MaterialForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (type === "VIDEO" || type === "IMAGE" || type === "AUDIO") {
+      if (isUploadingFile) {
+        alert("文件正在上传中，请稍候")
+        return
+      }
+      if (!fileKey) {
+        alert("请先选择并上传文件")
+        return
+      }
+    }
     setIsSubmitting(true)
     try {
       await onSave({
@@ -65,6 +80,8 @@ export function MaterialForm({
         content: type === "COPY" || type === "TOPIC" || type === "REFERENCE" ? content : undefined,
         tags,
         fileKey: type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileKey : undefined,
+        fileSize: type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileSize : undefined,
+        fileMime: type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileMime : undefined,
         url: type === "REFERENCE" ? url : type === "VIDEO" || type === "IMAGE" || type === "AUDIO" ? fileUrl : undefined,
         ideaStatus: type === "IDEA" ? ideaStatus : undefined,
       })
@@ -110,7 +127,10 @@ export function MaterialForm({
             onUploadComplete={(result) => {
               setFileKey(result.key)
               setFileUrl(result.url)
+              setFileSize(result.size)
+              setFileMime(result.mime)
             }}
+            onUploadingChange={setIsUploadingFile}
           />
         )
 
@@ -223,8 +243,8 @@ export function MaterialForm({
             取消
           </Button>
         )}
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "保存中..." : "保存"}
+        <Button type="submit" disabled={isSubmitting || isUploadingFile}>
+          {isSubmitting ? "保存中..." : isUploadingFile ? "等待上传..." : "保存"}
         </Button>
       </div>
     </form>

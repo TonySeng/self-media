@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { isAbsolute, join, resolve } from 'path';
 import { stat } from 'fs/promises';
+import { getEnv } from '@/lib/env';
 
-const UPLOADS_DIR = join(process.cwd(), 'data', 'uploads');
+function getUploadsDir(): string {
+  const configured = getEnv().LOCAL_STORAGE_PATH;
+  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+}
 
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -34,9 +38,10 @@ export async function GET(
     return NextResponse.json({ error: 'Path required' }, { status: 400 });
   }
 
-  const filePath = join(UPLOADS_DIR, ...path);
+  const uploadsDir = getUploadsDir();
+  const filePath = join(uploadsDir, ...path);
 
-  if (!filePath.startsWith(UPLOADS_DIR)) {
+  if (!filePath.startsWith(uploadsDir)) {
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
   }
 

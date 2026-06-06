@@ -3,6 +3,7 @@ import { LocalStorageProvider } from './local';
 import { COSStorageProvider } from './cos';
 import { db } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
+import { getEnv } from '@/lib/env';
 import * as path from 'node:path';
 
 export type StorageType = 'local' | 'cos';
@@ -80,7 +81,10 @@ export async function getStorageProvider(): Promise<StorageProvider> {
     }
     cachedProvider = new COSStorageProvider(config.cos);
   } else {
-    const uploadDir = path.resolve(process.cwd(), 'data/uploads');
+    const env = getEnv();
+    const uploadDir = path.isAbsolute(env.LOCAL_STORAGE_PATH)
+      ? env.LOCAL_STORAGE_PATH
+      : path.resolve(process.cwd(), env.LOCAL_STORAGE_PATH);
     cachedProvider = new LocalStorageProvider(uploadDir);
   }
 

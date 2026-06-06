@@ -56,13 +56,16 @@ function getUserDataDirs() {
 }
 function getProfiles(userDataDir) {
     const profileNames = [];
-    if (fs.existsSync(path.join(userDataDir, 'Default', 'Cookies'))) {
+    // 新しい Chrome（v96+）は Cookies を Profile/Network/Cookies に置く。古い版は Profile/Cookies。
+    const hasCookies = (profileDir) => fs.existsSync(path.join(profileDir, 'Network', 'Cookies')) ||
+        fs.existsSync(path.join(profileDir, 'Cookies'));
+    if (hasCookies(path.join(userDataDir, 'Default'))) {
         profileNames.push('Default');
     }
     try {
         const entries = fs.readdirSync(userDataDir);
         for (const e of entries) {
-            if (/^Profile \d+$/.test(e) && fs.existsSync(path.join(userDataDir, e, 'Cookies'))) {
+            if (/^Profile \d+$/.test(e) && hasCookies(path.join(userDataDir, e))) {
                 profileNames.push(e);
             }
         }

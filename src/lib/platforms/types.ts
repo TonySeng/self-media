@@ -38,10 +38,12 @@ export type StandardizedAccountMetric = {
 
 export type StandardizedComment = {
   platformCommentId: string;
+  parentCommentId: string | null;
   content: string;
   authorName: string;
   authorAvatar: string | null;
   authorUid: string | null;
+  isAuthorReply: boolean;
   likeCount: number;
   replyCount: number;
   publishedAt: Date;

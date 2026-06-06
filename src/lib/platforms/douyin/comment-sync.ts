@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { listComments } from './api';
+import { parseCookieString } from './cookie';
 
 export type CommentSyncResult = {
   workId: string;
@@ -26,7 +27,12 @@ export async function syncWorkComments(
   }
 
   const cookie = decrypt(work.account.cookieEncrypted);
-  const fetched = await listComments(cookie, work.platformWorkId, maxPages);
+
+  // 尝试从 cookie 提取 uid_tt 作为 ownerUid（用于标记作者回复）
+  const cookieMap = parseCookieString(cookie);
+  const ownerUid = cookieMap['uid_tt'] || undefined;
+
+  const fetched = await listComments(cookie, work.platformWorkId, maxPages, ownerUid);
 
   let newCount = 0;
 
@@ -41,10 +47,12 @@ export async function syncWorkComments(
       create: {
         workId: work.id,
         platformCommentId: comment.platformCommentId,
+        parentCommentId: comment.parentCommentId,
         content: comment.content,
         authorName: comment.authorName,
         authorAvatar: comment.authorAvatar,
         authorUid: comment.authorUid,
+        isAuthorReply: comment.isAuthorReply,
         likeCount: comment.likeCount,
         replyCount: comment.replyCount,
         publishedAt: comment.publishedAt,
@@ -54,6 +62,7 @@ export async function syncWorkComments(
         content: comment.content,
         likeCount: comment.likeCount,
         replyCount: comment.replyCount,
+        isAuthorReply: comment.isAuthorReply,
         rawData: comment.rawData as object,
       },
     });

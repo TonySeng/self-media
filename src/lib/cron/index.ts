@@ -4,11 +4,16 @@ import { decrypt } from '@/lib/crypto';
 import { runSync } from '@/lib/platforms/douyin/sync';
 import { syncWorkComments } from '@/lib/platforms/douyin/comment-sync';
 import { syncBenchmarkWorks } from '@/lib/platforms/douyin/benchmark-sync';
+import { autoReplyForAccount } from '@/lib/platforms/douyin/auto-reply';
 
 let task: ReturnType<typeof cron.schedule> | null = null;
 let currentExpr: string | null = null;
 
+let autoReplyTask: ReturnType<typeof cron.schedule> | null = null;
+let autoReplyCronExpr: string | null = null;
+
 const DEFAULT_CRON = '0 2 * * *';
+const DEFAULT_AUTO_REPLY_CRON = '*/10 * * * *';
 
 type SyncConfig = {
   cronExpr: string;
@@ -20,6 +25,11 @@ type SyncConfig = {
   benchmarkCookieFromAccountId: string | null;
 };
 
+type AutoReplyConfig = {
+  cronExpr: string;
+  enabled: boolean;
+};
+
 const DEFAULT_CONFIG: SyncConfig = {
   cronExpr: DEFAULT_CRON,
   enabled: true,
@@ -29,6 +39,31 @@ const DEFAULT_CONFIG: SyncConfig = {
   benchmarkMaxPages: 5,
   benchmarkCookieFromAccountId: null,
 };
+
+const DEFAULT_AUTO_REPLY_CONFIG: AutoReplyConfig = {
+  cronExpr: DEFAULT_AUTO_REPLY_CRON,
+  enabled: false,
+};
+
+/**
+ * 从 Setting 表读取自动回复配置
+ */
+async function loadAutoReplyConfig(): Promise<AutoReplyConfig> {
+  const setting = await db.setting.findUnique({
+    where: { key: 'auto_reply_config' },
+  });
+
+  if (!setting?.value || typeof setting.value !== 'object') {
+    return { ...DEFAULT_AUTO_REPLY_CONFIG };
+  }
+
+  const v = setting.value as Record<string, unknown>;
+  return {
+    cronExpr:
+      typeof v.cronExpr === 'string' && v.cronExpr ? v.cronExpr : DEFAULT_AUTO_REPLY_CRON,
+    enabled: v.enabled === true,
+  };
+}
 
 /**
  * 从 Setting 表读取同步配置
@@ -224,6 +259,8 @@ export async function startCron(): Promise<void> {
 
   currentExpr = config.cronExpr;
   console.log(`[cron] scheduled daily sync at "${config.cronExpr}"`);
+
+  await startAutoReplyCron();
 }
 
 /**
@@ -231,4 +268,98 @@ export async function startCron(): Promise<void> {
  */
 export async function reloadCron(): Promise<void> {
   await startCron();
+}
+
+/**
+ * 执行一次所有账号的自动回复（串行）
+ */
+export async function runAutoReplyForAllAccounts(): Promise<{
+  accountsOk: number;
+  accountsFailed: number;
+  repliedTotal: number;
+  skippedTotal: number;
+}> {
+  const config = await loadAutoReplyConfig();
+
+  if (!config.enabled) {
+    return { accountsOk: 0, accountsFailed: 0, repliedTotal: 0, skippedTotal: 0 };
+  }
+
+  const accounts = await db.platformAccount.findMany({
+    where: { platform: 'DOUYIN', cookieStatus: 'ACTIVE' },
+    select: { id: true, nickname: true },
+  });
+
+  let accountsOk = 0;
+  let accountsFailed = 0;
+  let repliedTotal = 0;
+  let skippedTotal = 0;
+
+  for (const a of accounts) {
+    try {
+      const result = await autoReplyForAccount(a.id);
+      accountsOk++;
+      repliedTotal += result.repliedCount;
+      skippedTotal += result.skippedCount;
+    } catch (e) {
+      accountsFailed++;
+      console.error(`[cron] auto-reply ${a.nickname} failed:`, e);
+      continue;
+    }
+  }
+
+  return { accountsOk, accountsFailed, repliedTotal, skippedTotal };
+}
+
+/**
+ * 启动或重启自动回复 cron 任务（基于 Setting 表中的 auto_reply_config）
+ *
+ * 幂等：相同表达式重复调用不会重复注册；表达式变了会先停旧任务再注册新的。
+ */
+export async function startAutoReplyCron(): Promise<void> {
+  const config = await loadAutoReplyConfig();
+
+  if (!config.enabled) {
+    if (autoReplyTask) {
+      autoReplyTask.stop();
+      autoReplyTask = null;
+      autoReplyCronExpr = null;
+      console.log('[cron] auto-reply disabled, task stopped');
+    }
+    return;
+  }
+
+  if (!cron.validate(config.cronExpr)) {
+    console.warn(`[cron] invalid auto-reply cronExpr="${config.cronExpr}", skipping`);
+    return;
+  }
+
+  if (autoReplyTask && autoReplyCronExpr === config.cronExpr) {
+    return;
+  }
+
+  if (autoReplyTask) {
+    autoReplyTask.stop();
+    autoReplyTask = null;
+  }
+
+  autoReplyTask = cron.schedule(config.cronExpr, async () => {
+    console.log('[cron] auto-reply started');
+    try {
+      const result = await runAutoReplyForAllAccounts();
+      console.log('[cron] auto-reply finished:', result);
+    } catch (e) {
+      console.error('[cron] auto-reply failed:', e);
+    }
+  });
+
+  autoReplyCronExpr = config.cronExpr;
+  console.log(`[cron] scheduled auto-reply at "${config.cronExpr}"`);
+}
+
+/**
+ * 配置变更后调用，重新加载自动回复 cron 任务
+ */
+export async function reloadAutoReplyCron(): Promise<void> {
+  await startAutoReplyCron();
 }

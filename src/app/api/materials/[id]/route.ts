@@ -22,6 +22,7 @@ export async function GET(
   try {
     const material = await db.material.findUnique({
       where: { id },
+      include: { tags: true },
     });
 
     if (!material) {
@@ -37,33 +38,32 @@ export async function GET(
   }
 }
 
-export async function PUT(
+export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   const { id } = await ctx.params;
   const parsed = UpdateMaterialSchema.safeParse(await req.json().catch(() => null));
-
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'invalid_body', details: parsed.error.issues },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'invalid_body', details: parsed.error.issues }, { status: 400 });
   }
-
   try {
     const material = await db.material.update({
       where: { id },
       data: parsed.data,
+      include: { tags: true },
     });
-
     return NextResponse.json(material);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'update_failed', message: String(error) },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: 'update_failed', message: String(error) }, { status: 500 });
   }
+}
+
+export async function PUT(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return PATCH(req, ctx);
 }
 
 export async function DELETE(

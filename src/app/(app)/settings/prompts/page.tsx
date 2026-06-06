@@ -21,6 +21,7 @@ const TYPE_LABEL: Record<string, string> = {
   WORKS_COMPARE: '横向对比',
   TREND: '趋势分析',
   COMMENT_INSIGHT: '评论洞察',
+  COMMENT_REPLY: '评论回复',
   BENCHMARK: '对标分析',
 };
 

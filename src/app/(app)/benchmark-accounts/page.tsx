@@ -29,6 +29,7 @@ export default function BenchmarkAccountsPage() {
   const [importInput, setImportInput] = useState('');
   const [maxPages, setMaxPages] = useState('50');
   const [cookieFromAccountId, setCookieFromAccountId] = useState<string>('');
+  const [fullSync, setFullSync] = useState(false);
   const [ownAccounts, setOwnAccounts] = useState<OwnAccount[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [form, setForm] = useState({
@@ -97,14 +98,15 @@ export default function BenchmarkAccountsPage() {
   }
 
   async function handleSyncAccount(id: string) {
-    const t = toast.loading('同步中...');
+    const t = toast.loading(fullSync ? '全量同步中（较慢）...' : '同步中...');
     try {
       const res = await fetch(`/api/benchmark-accounts/${id}/sync`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           cookieFromAccountId: cookieFromAccountId || null,
-          incremental: true,
+          // 全量同步翻满 maxPages 页；增量只拉到上次同步时间为止
+          incremental: !fullSync,
           maxPages: Number(maxPages) || 50,
         }),
       });
@@ -213,6 +215,35 @@ export default function BenchmarkAccountsPage() {
           <p className="text-xs text-muted-foreground">
             借用本机已绑定抖音账号的 Cookie 去访问对标账号公开主页，命中率更高
           </p>
+
+          <label className="flex items-center gap-2 pt-1 text-sm">
+            <input
+              type="checkbox"
+              checked={fullSync}
+              onChange={(e) => setFullSync(e.target.checked)}
+              className="h-4 w-4 rounded border"
+            />
+            <span>全量同步（翻满设定页数，拉取全部历史作品）</span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            点「同步作品」时生效。默认增量（只拉上次同步后的新作品，更快）；
+            勾选后做全量，会翻满下方页数、耗时更长，首次同步或想补全历史数据时用。
+          </p>
+
+          <div className="space-y-1.5 pt-1">
+            <Label>同步页数（每页 18 条）</Label>
+            <Input
+              type="number"
+              min={1}
+              max={200}
+              value={maxPages}
+              onChange={(e) => setMaxPages(e.target.value)}
+              className="w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              全量同步时最多翻这么多页。默认 50 页（约 900 条）
+            </p>
+          </div>
         </Card>
       )}
 

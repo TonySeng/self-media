@@ -1,6 +1,19 @@
 /**
- * 抖音创作者中心接口配置。
+ * 抖音接口配置。
  *
+ * ## 公开接口（www.douyin.com）
+ *
+ * 默认走浏览器签名器（`signer.ts`）：用 Playwright 启动 headless Chromium 加载抖音首页，
+ * 让 webmssdk 自动给请求注入 `a_bogus` / `msToken` / `x-secsdk-web-signature`。
+ * 签名永远跟主站同步，无需手抓。
+ *
+ * 通过环境变量 `DOUYIN_BROWSER_SIGNER=0` 关闭签名器，回退到手抓签名模式：
+ * 复制 `endpoints.local.example.ts` 为 `endpoints.local.ts`（已在 .gitignore），
+ * 把抓包来的完整 URL 填进去。
+ *
+ * ## 创作者中心接口（creator.douyin.com）
+ *
+ * 这类接口需要登录态 cookie（`sessionid_ss`），仍走 cookie + 静态签名。
  * 抓包步骤：
  *   1. 浏览器登录 https://creator.douyin.com
  *   2. 打开 DevTools → Network
@@ -10,9 +23,6 @@
  *
  * 如果 sessionid_ss 仍有效但接口返回签名失败（status 0 / data null），
  * 通常是 msToken/a_bogus 已过期，重抓即可。
- *
- * 本地开发：复制 endpoints.local.example.ts 为 endpoints.local.ts，填入真实抓包参数。
- * endpoints.local.ts 已在 .gitignore 中，不会被提交。
  */
 
 const BASE_ENDPOINTS = {
@@ -34,7 +44,7 @@ const BASE_ENDPOINTS = {
   /** 评论列表 */
   commentList: {
     urlTemplate:
-      'https://creator.douyin.com/web/api/third_party/aweme/api/comment/read/aweme/v1/web/comment/list/select/?aweme_id={awemeId}&cursor={cursor}&count=10&comment_select_options=0&sort_options=0&channel_id=618&app_id=2906&aid=2906&device_platform=webapp&msToken=zbj8AmL-NrTDIvPm5UeawE5xr6bSf6KoxGBoPlPnvu8MH2yxLq_iPMer6Owyit5pj5a2_D4yDrPge6jhY2hWYu4GMi3RSK6p8LcEn0hGs0dUYLOQUtK5HcMbbyeJDv8Mlx_xjn_L38xottuyzLvlkybWPPx5vUnMj7ZuwSmgD4QfOYRUTbU_3lFJ&a_bogus=xJ4VgzX7YNWna3KtYOTue5xUR7fANBSyFpi%2FWc8nSPoqaq0cpZeyFcbbJxKFnhOHibB5iq2H5fPlGVxcuGkwZAHpLmkkuMX6NGQCVysLMqw6YMkQEHDYCzszFw0CWbGqeQnjNlR5UsMNZDQWIrIgWQVGy5FqBQYDSHFbd%2Fbbn9AxVWjHIndteBYpqhIx',
+      'https://creator.douyin.com/web/api/third_party/aweme/api/comment/read/aweme/v1/web/comment/list/?aweme_id={awemeId}&cursor={cursor}&count=10&aid=2906&device_platform=webapp&msToken={msToken}&a_bogus={aBogus}',
     pageSize: 10,
   },
   /** 粉丝画像（性别 / 年龄 / 地域） */
@@ -45,30 +55,39 @@ const BASE_ENDPOINTS = {
   /**
    * 公开用户信息（对标账号）
    *
-   * 抓包来源：在隐身/未登录浏览器打开 https://www.douyin.com/user/<sec_uid>
-   * 找路径含 /aweme/v1/web/user/profile/ 的 XHR
+   * 默认走浏览器签名器（src/lib/platforms/douyin/signer.ts），无需手填签名参数。
+   * 关闭签名器（DOUYIN_BROWSER_SIGNER=0）时，需在 endpoints.local.ts 里覆盖此模板，
+   * 把抓包来的 msToken/a_bogus/x-secsdk-web-signature/timestamp 等填回去。
    */
   publicUserInfo: {
     urlTemplate:
-      'https://www.douyin.com/aweme/v1/web/user/profile/other/?device_platform=webapp&aid=6383&channel=channel_pc_web&publish_video_strategy_type=2&source=channel_pc_web&sec_user_id={secUid}&personal_center_strategy=1&profile_other_record_enable=1&land_to=1&update_version_code=170400&pc_client_type=1&pc_libra_divert=Windows&support_h265=1&support_dash=1&cpu_core_num=16&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1560&screen_height=1040&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=148.0.0.0&browser_online=true&engine_name=Blink&engine_version=148.0.0.0&os_name=Windows&os_version=10&device_memory=32&platform=PC&downlink=10&effective_type=4g&round_trip_time=50&webid={webid}&uifid={uifid}&verifyFp={verifyFp}&fp={fp}&msToken={msToken}&a_bogus={aBogus}&timestamp={timestamp}&x-secsdk-web-signature={xSecsdkWebSignature}',
+      'https://www.douyin.com/aweme/v1/web/user/profile/other/?device_platform=webapp&aid=6383&channel=channel_pc_web&publish_video_strategy_type=2&source=channel_pc_web&sec_user_id={secUid}&personal_center_strategy=1&profile_other_record_enable=1&land_to=1&pc_client_type=1&support_h265=1&support_dash=1&cpu_core_num=16&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1560&screen_height=1040&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=148.0.0.0&browser_online=true&engine_name=Blink&engine_version=148.0.0.0&os_name=Windows&os_version=10&device_memory=32&platform=PC',
   },
   /**
    * 公开作品列表（对标账号作品）
    *
-   * 抓包来源：在用户主页滚动加载更多作品，找 /aweme/v1/web/aweme/post/
+   * 默认走浏览器签名器；关闭时需在 endpoints.local.ts 覆盖填入手抓签名参数。
    */
   publicAwemeList: {
     urlTemplate:
-      'https://www.douyin.com/aweme/v1/web/aweme/post/?device_platform=webapp&aid=6383&channel=channel_pc_web&sec_user_id={secUid}&max_cursor={maxCursor}&locate_query=false&show_live_replay_strategy=1&need_time_list=1&time_list_query=0&whale_cut_token=&cut_version=1&count=18&publish_video_strategy_type=2&from_user_page=1&update_version_code=170400&pc_client_type=1&pc_libra_divert=Windows&support_h265=1&support_dash=1&cpu_core_num=16&version_code=290100&version_name=29.1.0&cookie_enabled=true&screen_width=1560&screen_height=1040&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=148.0.0.0&browser_online=true&engine_name=Blink&engine_version=148.0.0.0&os_name=Windows&os_version=10&device_memory=32&platform=PC&downlink=10&effective_type=4g&round_trip_time=50&webid={webid}&uifid={uifid}&verifyFp={verifyFp}&fp={fp}&msToken={msToken}&a_bogus={aBogus}&timestamp={timestamp}&x-secsdk-web-signature={xSecsdkWebSignature}',
+      'https://www.douyin.com/aweme/v1/web/aweme/post/?device_platform=webapp&aid=6383&channel=channel_pc_web&sec_user_id={secUid}&max_cursor={maxCursor}&locate_query=false&show_live_replay_strategy=1&need_time_list=1&time_list_query=0&whale_cut_token=&cut_version=1&count=18&publish_video_strategy_type=2&from_user_page=1&pc_client_type=1&support_h265=1&support_dash=1&cpu_core_num=16&version_code=290100&version_name=29.1.0&cookie_enabled=true&screen_width=1560&screen_height=1040&browser_language=zh-CN&browser_platform=Win32&browser_name=Chrome&browser_version=148.0.0.0&browser_online=true&engine_name=Blink&engine_version=148.0.0.0&os_name=Windows&os_version=10&device_memory=32&platform=PC',
     pageSize: 18,
+  },
+  /** 回复评论 */
+  commentReply: {
+    urlTemplate:
+      'https://creator.douyin.com/aweme/janus/creator/comment/aweme/v1/web/comment/multi_publish/?aweme_id={awemeId}&text={text}&reply_to_comment_ids={commentId}&channel_id=618&aid=2906&device_platform=webapp&msToken={msToken}&a_bogus={aBogus}',
   },
 } as const;
 
 // 尝试加载本地覆盖配置（包含真实抓包参数）
+// 注意：endpoints.local.ts 在 .gitignore 中，仅本地开发使用
+// 用 eval('require') 绕过 webpack 静态分析，避免编译时尝试打包此可选文件
 let LOCAL_ENDPOINTS: typeof BASE_ENDPOINTS | null = null;
 try {
-  // @ts-expect-error - dynamic import of optional local file
-  LOCAL_ENDPOINTS = await import('./endpoints.local.ts').then(m => m.DOUYIN_ENDPOINTS);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const dynamicRequire = eval('require');
+  LOCAL_ENDPOINTS = dynamicRequire('./endpoints.local').DOUYIN_ENDPOINTS;
 } catch {
   // endpoints.local.ts 不存在或加载失败，使用占位符版本
 }

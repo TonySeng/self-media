@@ -10,7 +10,8 @@ type MaterialType = "VIDEO" | "IMAGE" | "AUDIO"
 
 interface FileUploaderProps {
   type: MaterialType
-  onUploadComplete: (result: { key: string; url: string }) => void
+  onUploadComplete: (result: { key: string; url: string; size: number; mime: string }) => void
+  onUploadingChange?: (uploading: boolean) => void
   className?: string
 }
 
@@ -26,15 +27,23 @@ const TYPE_LABEL: Record<MaterialType, string> = {
   AUDIO: "音频",
 }
 
+const MAX_SIZE_MB: Record<MaterialType, number> = {
+  VIDEO: 100,
+  IMAGE: 10,
+  AUDIO: 20,
+}
+
 export function FileUploader({
   type,
   onUploadComplete,
+  onUploadingChange,
   className,
 }: FileUploaderProps) {
   const [file, setFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
+  const [isUploaded, setIsUploaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,45 +62,15 @@ export function FileUploader({
     [type]
   )
 
-  const handleFileSelect = useCallback(
-    (selectedFile: File) => {
-      if (!validateFile(selectedFile)) {
-        setError(`请选择有效的${TYPE_LABEL[type]}文件`)
-        return
-      }
-
-      setFile(selectedFile)
-      setError(null)
-
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-      setPreviewUrl(URL.createObjectURL(selectedFile))
-    },
-    [type, previewUrl, validateFile]
-  )
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setIsDragging(false)
-
-      const droppedFile = e.dataTransfer.files[0]
-      if (droppedFile) {
-        handleFileSelect(droppedFile)
-      }
-    },
-    [handleFileSelect]
-  )
-
-  const handleUpload = async () => {
-    if (!file) return
-
+  const handleUpload = useCallback(async (target: File) => {
     setIsUploading(true)
+    onUploadingChange?.(true)
     setError(null)
     setUploadProgress(0)
 
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', target)
       formData.append('type', type)
 
       const xhr = new XMLHttpRequest()
@@ -102,10 +81,16 @@ export function FileUploader({
         }
       })
 
-      const result = await new Promise<{ key: string; url: string }>((resolve, reject) => {
+      const result = await new Promise<{ key: string; url: string; size: number; mime: string }>((resolve, reject) => {
         xhr.addEventListener('load', () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText))
+            const data = JSON.parse(xhr.responseText)
+            resolve({
+              key: data.key,
+              url: data.url,
+              size: data.size ?? target.size,
+              mime: data.mime ?? target.type,
+            })
           } else {
             try {
               const errorData = JSON.parse(xhr.responseText)
@@ -121,12 +106,53 @@ export function FileUploader({
       })
 
       onUploadComplete(result)
+      setIsUploaded(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败')
+      setIsUploaded(false)
     } finally {
       setIsUploading(false)
+      onUploadingChange?.(false)
     }
-  }
+  }, [type, onUploadComplete, onUploadingChange])
+
+  const handleFileSelect = useCallback(
+    (selectedFile: File) => {
+      if (!validateFile(selectedFile)) {
+        setError(`请选择有效的${TYPE_LABEL[type]}文件`)
+        return
+      }
+
+      const maxSizeBytes = MAX_SIZE_MB[type] * 1024 * 1024
+      if (selectedFile.size > maxSizeBytes) {
+        setError(`${TYPE_LABEL[type]}文件不能超过 ${MAX_SIZE_MB[type]} MB`)
+        return
+      }
+
+      setFile(selectedFile)
+      setError(null)
+      setIsUploaded(false)
+
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(URL.createObjectURL(selectedFile))
+
+      void handleUpload(selectedFile)
+    },
+    [type, previewUrl, validateFile, handleUpload]
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+
+      const droppedFile = e.dataTransfer.files[0]
+      if (droppedFile) {
+        handleFileSelect(droppedFile)
+      }
+    },
+    [handleFileSelect]
+  )
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -183,7 +209,7 @@ export function FileUploader({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            拖拽文件到此处或点击选择{TYPE_LABEL[type]}
+            拖拽文件到此处或点击选择{TYPE_LABEL[type]}（最大 {MAX_SIZE_MB[type]} MB）
           </p>
         )}
 
@@ -200,12 +226,6 @@ export function FileUploader({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {file && !isUploading && (
-        <Button onClick={handleUpload} className="w-full">
-          上传
-        </Button>
-      )}
-
       {isUploading && (
         <div className="space-y-2">
           <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
@@ -216,6 +236,12 @@ export function FileUploader({
           </div>
           <p className="text-sm text-center text-muted-foreground">上传中... {uploadProgress}%</p>
         </div>
+      )}
+
+      {isUploaded && !isUploading && (
+        <p className="text-sm text-center text-green-600 dark:text-green-400">
+          ✓ 上传成功，可以保存
+        </p>
       )}
     </div>
   )

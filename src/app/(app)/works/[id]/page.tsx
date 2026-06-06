@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 
 type Detail = {
   id: string;
+  platformWorkId: string;
   title: string;
   description: string | null;
   coverUrl: string | null;
@@ -30,12 +31,19 @@ type Detail = {
 
 type Comment = {
   id: string;
+  platformCommentId: string;
+  parentCommentId: string | null;
   content: string;
   authorName: string;
   authorAvatar: string | null;
+  isAuthorReply: boolean;
   likeCount: number;
   replyCount: number;
   publishedAt: string;
+  autoReplyStatus: 'REPLIED' | 'SKIPPED' | 'FAILED' | null;
+  autoReplyContent: string | null;
+  autoReplyAt: string | null;
+  autoReplyError: string | null;
 };
 
 export default function WorkDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -288,39 +296,249 @@ export default function WorkDetailPage({ params }: { params: Promise<{ id: strin
           </p>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {comments.map((c) => (
-              <div key={c.id} className="border-b pb-2 last:border-b-0">
-                <div className="flex items-start gap-2">
-                  {c.authorAvatar && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={c.authorAvatar}
-                      alt=""
-                      className="h-7 w-7 shrink-0 rounded-full object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {c.authorName}
-                      </span>
-                      <span>·</span>
-                      <span>{new Date(c.publishedAt).toLocaleString()}</span>
-                      {c.likeCount > 0 && (
-                        <>
-                          <span>·</span>
-                          <span>👍 {c.likeCount}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="mt-1 text-sm">{c.content}</div>
-                  </div>
-                </div>
-              </div>
+            {groupCommentsByParent(comments).map((c) => (
+              <CommentItem
+                key={c.id}
+                comment={c}
+                platformWorkId={data.platformWorkId}
+                workId={data.id}
+              />
             ))}
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/**
+ * 把评论按 "父评论 → 紧跟其子回复" 的顺序重排。
+ *
+ * 后端按 publishedAt/likeCount 平铺返回，子回复可能漂到父评论之上（尤其是作者回复早于父评论被更新时）。
+ * 前端只用 parentCommentId 加缩进的话，视觉上回复就跟错位了——这里把回复按时间正序紧贴到对应父评论下方，
+ * 父评论之间保持原排序。孤儿回复（找不到父）按原顺序补到末尾。
+ */
+function groupCommentsByParent(list: Comment[]): Comment[] {
+  const byPid = new Map<string, Comment>();
+  for (const c of list) byPid.set(c.platformCommentId, c);
+
+  const childrenOf = new Map<string, Comment[]>();
+  const roots: Comment[] = [];
+  const orphans: Comment[] = [];
+
+  for (const c of list) {
+    if (!c.parentCommentId) {
+      roots.push(c);
+    } else if (byPid.has(c.parentCommentId)) {
+      const arr = childrenOf.get(c.parentCommentId) ?? [];
+      arr.push(c);
+      childrenOf.set(c.parentCommentId, arr);
+    } else {
+      orphans.push(c);
+    }
+  }
+
+  // 子回复按发布时间正序（早→晚），符合 "对话线" 阅读习惯
+  for (const arr of childrenOf.values()) {
+    arr.sort(
+      (a, b) =>
+        new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime(),
+    );
+  }
+
+  const out: Comment[] = [];
+  for (const root of roots) {
+    out.push(root);
+    const kids = childrenOf.get(root.platformCommentId);
+    if (kids) out.push(...kids);
+  }
+  return out.concat(orphans);
+}
+
+function CommentItem({
+  comment,
+  platformWorkId,
+  workId,
+}: {
+  comment: Comment;
+  platformWorkId: string;
+  workId: string;
+}) {
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function generateDraft() {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/ai/comment-reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commentId: comment.id }),
+      });
+      const j = (await res.json()) as { result?: string; message?: string };
+      if (!res.ok || !j.result) {
+        toast.error(j.message ?? '生成失败');
+        return;
+      }
+      setDraft(j.result);
+      setReplyOpen(true);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function submitReply() {
+    if (!draft.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/works/${workId}/comments/reply`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          commentId: comment.platformCommentId,
+          text: draft.trim(),
+        }),
+      });
+      const j = (await res.json()) as { ok?: boolean; message?: string };
+      if (!res.ok || !j.ok) {
+        toast.error(j.message ?? '回复失败');
+        return;
+      }
+      toast.success('回复成功');
+      setReplyOpen(false);
+      setDraft('');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function copyAndOpenDouyin() {
+    if (!draft.trim()) return;
+    try {
+      await navigator.clipboard.writeText(draft.trim());
+      toast.success('回复内容已复制，正在打开抖音...');
+    } catch {
+      toast.error('复制失败，请手动复制');
+    }
+    const url = `https://www.douyin.com/video/${platformWorkId}`;
+    window.open(url, '_blank', 'noopener');
+  }
+
+  return (
+    <div className={`border-b pb-2 last:border-b-0 ${comment.parentCommentId ? 'ml-8 border-l pl-3' : ''}`}>
+      <div className="flex items-start gap-2">
+        {comment.authorAvatar && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={comment.authorAvatar}
+            alt=""
+            className="h-7 w-7 shrink-0 rounded-full object-cover"
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{comment.authorName}</span>
+            {comment.isAuthorReply && (
+              <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700">作者</span>
+            )}
+            {comment.autoReplyStatus === 'REPLIED' && (
+              <span
+                className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-700"
+                title={`自动回复：${comment.autoReplyContent ?? ''}\n${
+                  comment.autoReplyAt ? new Date(comment.autoReplyAt).toLocaleString() : ''
+                }`}
+              >
+                已自动回复
+              </span>
+            )}
+            {comment.autoReplyStatus === 'SKIPPED' && (
+              <span
+                className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title={comment.autoReplyError ?? ''}
+              >
+                已跳过
+              </span>
+            )}
+            {comment.autoReplyStatus === 'FAILED' && (
+              <span
+                className="rounded bg-red-100 px-1 py-0.5 text-[10px] font-medium text-red-700"
+                title={comment.autoReplyError ?? ''}
+              >
+                自动回复失败
+              </span>
+            )}
+            <span>·</span>
+            <span>{new Date(comment.publishedAt).toLocaleString()}</span>
+            {comment.likeCount > 0 && (
+              <>
+                <span>·</span>
+                <span>👍 {comment.likeCount}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-1 text-sm">{comment.content}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void generateDraft()}
+              disabled={generating}
+              className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+            >
+              {generating ? 'AI 生成中…' : '✨ AI 生成回复'}
+            </button>
+            {!replyOpen && draft && (
+              <button
+                type="button"
+                onClick={() => setReplyOpen(true)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                展开草稿
+              </button>
+            )}
+          </div>
+          {replyOpen && (
+            <div className="mt-2 space-y-2 rounded-md border bg-muted/40 p-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                className="h-16 w-full resize-none rounded border bg-background px-2 py-1 text-sm"
+                placeholder="编辑回复内容…"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{draft.length} 字</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReplyOpen(false)}
+                    className="rounded border px-2 py-1 text-xs hover:bg-muted"
+                  >
+                    收起
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyAndOpenDouyin()}
+                    disabled={!draft.trim()}
+                    className="rounded border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  >
+                    复制并跳转
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitReply()}
+                    disabled={!draft.trim() || submitting}
+                    className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {submitting ? '回复中…' : '直接回复'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

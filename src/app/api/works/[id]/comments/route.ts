@@ -29,12 +29,18 @@ export async function GET(
       items: comments.map((c) => ({
         id: c.id,
         platformCommentId: c.platformCommentId,
+        parentCommentId: c.parentCommentId,
         content: c.content,
         authorName: c.authorName,
         authorAvatar: c.authorAvatar,
+        isAuthorReply: c.isAuthorReply,
         likeCount: c.likeCount,
         replyCount: c.replyCount,
         publishedAt: c.publishedAt,
+        autoReplyStatus: c.autoReplyStatus,
+        autoReplyContent: c.autoReplyContent,
+        autoReplyAt: c.autoReplyAt,
+        autoReplyError: c.autoReplyError,
       })),
     });
   } catch (error) {

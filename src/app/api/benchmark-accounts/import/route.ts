@@ -58,8 +58,10 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     let syncStats = null;
     if (parsed.data.syncWorks) {
+      // 导入接口始终全量同步（incremental=false），确保用户手动操作能拿到完整数据；
+      // 定时任务走增量（调用 syncBenchmarkWorks 时显式传 incremental=true）
       syncStats = await syncBenchmarkWorks(accountId, fetchCookie, {
-        incremental: !created,
+        incremental: false,
         maxPages: parsed.data.maxPages,
       });
     }
@@ -70,6 +72,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       syncStats,
     });
   } catch (error) {
+    console.error('[benchmark-import] error:', error);
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { error: 'import_failed', message },

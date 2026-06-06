@@ -28,7 +28,7 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   getUrl(key: string): string {
-    return `/uploads/${key}`;
+    return `/api/uploads/${key}`;
   }
 
   async delete(key: string): Promise<void> {

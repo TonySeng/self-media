@@ -1,21 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
-import { douyinFetch, sleep, HttpError } from '@/lib/platforms/douyin/http';
+import { douyinFetch, sleep, HttpError, DouyinSignatureExpiredError } from '@/lib/platforms/douyin/http';
+import { __test as signerTest } from '@/lib/platforms/douyin/signer';
 
 let agent: MockAgent;
 let original: Dispatcher;
+let prevSignerEnv: string | undefined;
 
 beforeEach(() => {
   original = getGlobalDispatcher();
   agent = new MockAgent();
   agent.disableNetConnect();
   setGlobalDispatcher(agent);
+  // 测试默认走 undici mock，关掉浏览器签名器避免真去启动 Chromium
+  prevSignerEnv = process.env.DOUYIN_BROWSER_SIGNER;
+  process.env.DOUYIN_BROWSER_SIGNER = '0';
 });
 
 afterEach(async () => {
   agent.assertNoPendingInterceptors();
   setGlobalDispatcher(original);
   await agent.close();
+  if (prevSignerEnv === undefined) delete process.env.DOUYIN_BROWSER_SIGNER;
+  else process.env.DOUYIN_BROWSER_SIGNER = prevSignerEnv;
 });
 
 describe('douyinFetch', () => {
@@ -54,6 +61,38 @@ describe('douyinFetch', () => {
     await expect(
       douyinFetch('https://creator.douyin.com/q', { cookie: 'sessionid_ss=a', retryDelayMs: 1 }),
     ).rejects.toThrow(HttpError);
+  });
+
+  it('throws DouyinSignatureExpiredError on empty 200 body (douyin风控)', async () => {
+    const pool = agent.get('https://www.douyin.com');
+    pool.intercept({ path: '/aweme/v1/web/user/profile/other/?x=1', method: 'GET' }).reply(200, '');
+
+    await expect(
+      douyinFetch('https://www.douyin.com/aweme/v1/web/user/profile/other/?x=1', {
+        cookie: '',
+        retryDelayMs: 1,
+      }),
+    ).rejects.toThrow(DouyinSignatureExpiredError);
+  });
+});
+
+describe('signer.stripSignedParams', () => {
+  it('removes msToken / a_bogus / x-secsdk-web-signature / timestamp / fp', () => {
+    const url =
+      'https://www.douyin.com/aweme/v1/web/aweme/post/?sec_user_id=ABC&max_cursor=0&count=18' +
+      '&msToken=MM&a_bogus=BB&x-secsdk-web-signature=SS&timestamp=123&fp=FF&verifyFp=VF&webid=WW&uifid=UU&_signature=XX';
+    const out = signerTest.stripSignedParams(url);
+    const u = new URL(out);
+    expect(u.searchParams.get('sec_user_id')).toBe('ABC');
+    expect(u.searchParams.get('max_cursor')).toBe('0');
+    expect(u.searchParams.get('count')).toBe('18');
+    for (const k of ['msToken', 'a_bogus', 'x-secsdk-web-signature', 'timestamp', 'fp', 'verifyFp', 'webid', 'uifid', '_signature']) {
+      expect(u.searchParams.has(k)).toBe(false);
+    }
+  });
+
+  it('returns input unchanged when URL is malformed', () => {
+    expect(signerTest.stripSignedParams('not a url')).toBe('not a url');
   });
 });
 

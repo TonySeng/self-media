@@ -1,4 +1,4 @@
-import { douyinFetch } from './http';
+import { douyinFetch, randomDelayMs, sleep } from './http';
 import { DOUYIN_ENDPOINTS, fillTemplate } from './endpoints';
 import {
   normalizeCommentList,
@@ -83,6 +83,7 @@ export async function listComments(
   cookie: string,
   awemeId: string,
   maxPages: number = 10,
+  ownerUid?: string,
 ): Promise<StandardizedComment[]> {
   const all: StandardizedComment[] = [];
   let cursor = 0;
@@ -94,7 +95,7 @@ export async function listComments(
     });
     const res = await douyinFetch(url, { cookie });
     const json = (await res.json()) as Record<string, unknown>;
-    const out = normalizeCommentList(json);
+    const out = normalizeCommentList(json, ownerUid);
     all.push(...out.comments);
 
     if (!out.hasMore) break;
@@ -112,11 +113,15 @@ export async function getPublicUserInfo(
   secUid: string,
   cookie?: string,
 ): Promise<StandardizedBenchmarkAccount> {
+  console.log('[getPublicUserInfo] secUid:', secUid, 'cookie:', cookie ? 'provided' : 'none');
   const url = fillTemplate(DOUYIN_ENDPOINTS.publicUserInfo.urlTemplate, {
     secUid,
   });
+  console.log('[getPublicUserInfo] url:', url);
   const res = await douyinFetch(url, { cookie: cookie || '' });
-  return normalizePublicUserInfo(await res.json());
+  const json = await res.json();
+  console.log('[getPublicUserInfo] raw response:', JSON.stringify(json).slice(0, 200));
+  return normalizePublicUserInfo(json);
 }
 
 /**
@@ -142,21 +147,105 @@ export async function listPublicAwemes(
     const out = normalizePublicAwemeList(json);
     all.push(...out.works);
 
+    console.log(
+      `[listPublicAwemes] page=${page + 1}/${maxPages}, works=${out.works.length}, total=${all.length}, hasMore=${out.hasMore}, cursor=${cursor}->${out.maxCursor}`,
+    );
+
     if (stopBefore) {
       const oldest = out.works.reduce<Date | null>(
         (acc, w) => (acc && acc < w.publishedAt ? acc : w.publishedAt),
         null,
       );
-      if (oldest && oldest < stopBefore) break;
+      if (oldest && oldest < stopBefore) {
+        console.log('[listPublicAwemes] stop: oldest work before stopBefore');
+        break;
+      }
     }
 
-    if (!out.hasMore) break;
+    if (!out.hasMore) {
+      console.log('[listPublicAwemes] stop: hasMore=false');
+      break;
+    }
     // 抖音 max_cursor 是时间戳；只在第二页之后才用相等判断停止
     // （首页 cursor=0 是合法的初始值，不能作为终止信号）
-    if (out.maxCursor === cursor) break;
-    if (page > 0 && out.maxCursor === 0) break;
+    if (out.maxCursor === cursor) {
+      console.log('[listPublicAwemes] stop: cursor not advancing');
+      break;
+    }
+    if (page > 0 && out.maxCursor === 0) {
+      console.log('[listPublicAwemes] stop: maxCursor returned to 0');
+      break;
+    }
     cursor = out.maxCursor;
+
+    // 翻页间延迟，降低触发风控的概率（模拟人工浏览节奏）
+    if (page + 1 < maxPages) {
+      const delay = randomDelayMs(1500, 3000);
+      console.log(`[listPublicAwemes] sleep ${delay}ms before next page`);
+      await sleep(delay);
+    }
   }
 
   return all;
+}
+
+/**
+ * 回复评论
+ * @throws {Error} 如果未配置 reply_sign 或抖音接口返回错误
+ */
+export async function postCommentReply(params: {
+  accountId: string;
+  awemeId: string;
+  commentId: string;
+  text: string;
+}): Promise<{ ok: true }> {
+  const { accountId, awemeId, commentId, text } = params;
+
+  // 从 Setting 表读取该账号的签名参数
+  const { db } = await import('@/lib/db');
+  const setting = await db.setting.findUnique({
+    where: { key: `reply_sign_${accountId}` },
+  });
+
+  if (!setting) {
+    throw new Error(`未配置 reply_sign_${accountId}，请到 /api/platforms/douyin/accounts/${accountId}/reply-sign 配置`);
+  }
+
+  const signData = setting.value as { msToken?: string; aBogus?: string };
+  if (!signData.msToken || !signData.aBogus) {
+    throw new Error(`reply_sign_${accountId} 缺少 msToken 或 aBogus 字段`);
+  }
+
+  // 读取账号 cookie
+  const account = await db.platformAccount.findUnique({
+    where: { id: accountId },
+  });
+  if (!account) {
+    throw new Error('账号不存在');
+  }
+
+  const { decrypt } = await import('@/lib/crypto');
+  const cookie = decrypt(account.cookieEncrypted);
+
+  // 拼接 URL（text 已在 fillTemplate 内部 URL-encode）
+  const url = fillTemplate(DOUYIN_ENDPOINTS.commentReply.urlTemplate, {
+    awemeId,
+    commentId,
+    text,
+    msToken: signData.msToken,
+    aBogus: signData.aBogus,
+  });
+
+  const res = await douyinFetch(url, { cookie, method: 'POST' });
+  const json = (await res.json()) as { status_code?: number; status_msg?: string };
+
+  if (!res.status || res.status < 200 || res.status >= 300) {
+    throw new Error(`HTTP ${res.status}: ${JSON.stringify(json)}`);
+  }
+
+  if (json.status_code !== 0) {
+    throw new Error(`抖音回复失败: status_code=${json.status_code}, msg=${json.status_msg}`);
+  }
+
+  return { ok: true };
 }

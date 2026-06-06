@@ -13,6 +13,11 @@ const SECTIONS = [
     description: '配置自动同步频率，手动触发全量同步',
   },
   {
+    href: '/settings/auto-reply',
+    title: '评论自动回复',
+    description: '定时扫描新增评论，按模板或 AI 自动回复，可配置黑名单与节流',
+  },
+  {
     href: '/settings/llm',
     title: 'LLM Provider',
     description: '配置 OpenAI 兼容的大模型 Provider 与默认模型',
