@@ -504,6 +504,7 @@ function ChromeImportCard({ onImported }: { onImported: () => void }) {
   const [secUid, setSecUid] = useState('');
   const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
 
   async function fetchProfiles() {
@@ -525,17 +526,71 @@ function ChromeImportCard({ onImported }: { onImported: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loginWithBrowser() {
+    if (!window.electron) return;
+    setLoginLoading(true);
+    try {
+      const data = await window.electron.openDouyinLogin();
+      if (!data.secUid) {
+        toast.error('登录成功但未能提取 sec_uid，请使用从 Chrome 读取方式');
+        return;
+      }
+      const res = await fetch('/api/platforms/douyin/accounts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          cookie: data.cookie,
+          secUid: data.secUid,
+          nickname: data.nickname || '抖音账号',
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { message?: string };
+        toast.error(j.message ?? '导入失败');
+        return;
+      }
+      toast.success(`账号已导入：${data.nickname || '抖音账号'}`);
+      onImported();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '登录失败');
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
   async function importCookie() {
-    if (!selectedProfile || !secUid.trim()) return;
+    if (!selectedProfile) return;
     setLoading(true);
     try {
       const cookie = await window.electron!.readChromeCookies(selectedProfile);
+
+      // 自动从 Cookie 提取 sec_uid（如果用户没填）
+      let finalSecUid = secUid.trim();
+      if (!finalSecUid) {
+        const ext = await fetch('/api/platforms/douyin/extract-sec-uid', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        });
+        if (!ext.ok) {
+          const j = (await ext.json().catch(() => ({}))) as { message?: string };
+          toast.error('自动提取 sec_uid 失败：' + (j.message ?? '请手动输入 sec_uid'));
+          return;
+        }
+        const { secUid: extracted, nickname: extractedName } = (await ext.json()) as {
+          secUid: string;
+          nickname: string | null;
+        };
+        finalSecUid = extracted;
+        if (!nickname.trim() && extractedName) setNickname(extractedName);
+      }
+
       const res = await fetch('/api/platforms/douyin/accounts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           cookie,
-          secUid: secUid.trim(),
+          secUid: finalSecUid,
           nickname: nickname.trim() || undefined,
         }),
       });
@@ -562,6 +617,20 @@ function ChromeImportCard({ onImported }: { onImported: () => void }) {
         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-600">桌面版专属</span>
       </div>
 
+      <div className="space-y-3 rounded-md border border-green-200 bg-green-50/40 p-3">
+        <p className="text-sm font-medium">推荐：扫码登录（绕过 Chrome 130+ 加密限制）</p>
+        <p className="text-xs text-muted-foreground">
+          点击下方按钮会弹出抖音登录窗口，使用手机扫码登录后会自动获取 Cookie 和账号信息。
+        </p>
+        <Button onClick={() => void loginWithBrowser()} disabled={loginLoading}>
+          {loginLoading ? '等待登录…（请扫码）' : '扫码登录抖音'}
+        </Button>
+      </div>
+
+      <div className="border-t pt-3">
+        <p className="text-xs font-medium mb-2 text-muted-foreground">备选：从已安装的浏览器读取 Cookie（仅 Chrome 129 以下）</p>
+      </div>
+
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">选择浏览器 Profile</Label>
         {loadingProfiles ? (
@@ -586,13 +655,13 @@ function ChromeImportCard({ onImported }: { onImported: () => void }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground" htmlFor="chrome-secuid">
-            sec_uid（必填）
+            sec_uid（留空自动提取）
           </Label>
           <input
             id="chrome-secuid"
             type="text"
             className="w-full rounded-md border px-3 py-2 font-mono text-xs"
-            placeholder="MS4wLjAB..."
+            placeholder="留空将从 Cookie 自动获取"
             value={secUid}
             onChange={(e) => setSecUid(e.target.value)}
           />
@@ -618,7 +687,7 @@ function ChromeImportCard({ onImported }: { onImported: () => void }) {
 
       <Button
         onClick={() => void importCookie()}
-        disabled={loading || !selectedProfile || !secUid.trim()}
+        disabled={loading || !selectedProfile}
       >
         {loading ? '读取中…' : '从浏览器读取 Cookie'}
       </Button>

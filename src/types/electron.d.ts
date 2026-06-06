@@ -11,6 +11,11 @@ declare global {
           profilePath: string;
         }>
       >;
+      openDouyinLogin: () => Promise<{
+        cookie: string;
+        secUid: string | null;
+        nickname: string | null;
+      }>;
     };
   }
 }

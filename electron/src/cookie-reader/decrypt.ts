@@ -48,6 +48,11 @@ export function decryptCookieValue(encryptedValue: Buffer, masterKey: Buffer): s
   if (encryptedValue.length === 0) return '';
 
   const prefix = encryptedValue.subarray(0, 3).toString('ascii');
+  if (prefix === 'v20') {
+    // Chrome 130+ App-Bound Encryption — 需要不同的解密流程
+    // 简化处理：跳过此值
+    throw new Error('v20 (app-bound) cookies not supported');
+  }
   if (prefix !== 'v10' && prefix !== 'v11') {
     // 旧格式：可能是纯文本或旧 DPAPI 格式
     return encryptedValue.toString('utf8');
@@ -60,5 +65,20 @@ export function decryptCookieValue(encryptedValue: Buffer, masterKey: Buffer): s
 
   const decipher = crypto.createDecipheriv('aes-256-gcm', masterKey, nonce);
   decipher.setAuthTag(authTag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  // Chrome 110+: 解密后值前缀 32 字节是 SHA256(host_key) 校验，需要剥离
+  // 检测启发式: 如果前 32 字节看起来不像 ASCII 文本，认为是校验和
+  if (decrypted.length > 32) {
+    const possibleChecksum = decrypted.subarray(0, 32);
+    const remainder = decrypted.subarray(32);
+    const remainderText = remainder.toString('utf8');
+    // 如果 remainder 是有效 UTF-8 ASCII，使用它
+    if (/^[\x09\x20-\x7E]*$/.test(remainderText)) {
+      return remainderText;
+    }
+    // 否则检查整体是否 ASCII（旧格式）
+    void possibleChecksum;
+  }
+  return decrypted.toString('utf8');
 }

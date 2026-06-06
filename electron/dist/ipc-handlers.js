@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerIpcHandlers = registerIpcHandlers;
 const cookie_reader_1 = require("./cookie-reader");
+const login_window_1 = require("./login-window");
 function registerIpcHandlers(ipcMain) {
     ipcMain.handle('list-chrome-profiles', () => {
         return (0, cookie_reader_1.listBrowserProfiles)();
@@ -11,5 +12,8 @@ function registerIpcHandlers(ipcMain) {
             throw new Error('profilePath 参数无效');
         }
         return (0, cookie_reader_1.readDouyinCookiesFromProfile)(profilePath);
+    });
+    ipcMain.handle('open-douyin-login', async () => {
+        return (0, login_window_1.openDouyinLoginWindow)();
     });
 }

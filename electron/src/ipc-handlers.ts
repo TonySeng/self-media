@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron';
 import { listBrowserProfiles, readDouyinCookiesFromProfile } from './cookie-reader';
+import { openDouyinLoginWindow } from './login-window';
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('list-chrome-profiles', () => {
@@ -11,5 +12,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       throw new Error('profilePath 参数无效');
     }
     return readDouyinCookiesFromProfile(profilePath);
+  });
+
+  ipcMain.handle('open-douyin-login', async () => {
+    return openDouyinLoginWindow();
   });
 }

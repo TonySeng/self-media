@@ -63,11 +63,11 @@ export async function readDouyinCookiesFromProfile(profilePath: string): Promise
 
     const rows = db
       .prepare(
-        `SELECT name, encrypted_value FROM cookies
+        `SELECT name, encrypted_value, host_key FROM cookies
          WHERE host_key LIKE '%.douyin.com' OR host_key = 'douyin.com'
-         ORDER BY name`
+         ORDER BY host_key, name`
       )
-      .all() as RawCookieRow[];
+      .all() as Array<RawCookieRow & { host_key: string }>;
 
     db.close();
 
@@ -76,14 +76,26 @@ export async function readDouyinCookiesFromProfile(profilePath: string): Promise
     const masterKey = getMasterKey(userDataDir);
 
     const parts: string[] = [];
+    let sessionRowSeen = false;
     for (const row of rows) {
+      if (row.name === 'sessionid_ss') sessionRowSeen = true;
       try {
         const value = decryptCookieValue(row.encrypted_value, masterKey);
-        if (value) parts.push(`${row.name}=${value}`);
-      } catch {
-        // 单个 cookie 解密失败不影响整体
+        if (!value) continue;
+        if (row.name === 'sessionid_ss' || row.name === 'sessionid' || row.name === 'passport_csrf_token') {
+          const printable = /^[\x09\x20-\x7E]*$/.test(value);
+          console.log(`[cookie-reader] ${row.name}: len=${value.length} printable=${printable} preview=${JSON.stringify(value.slice(0, 80))}`);
+        }
+        const safeValue = value.replace(/[^\x09\x20-\x7E]/g, '');
+        if (!safeValue) continue;
+        parts.push(`${row.name}=${safeValue}`);
+      } catch (e) {
+        if (row.name === 'sessionid_ss') {
+          console.log(`[cookie-reader] sessionid_ss DECRYPT FAILED: ${e instanceof Error ? e.message : String(e)}, prefix=${row.encrypted_value.subarray(0, 3).toString('ascii')}, len=${row.encrypted_value.length}`);
+        }
       }
     }
+    console.log('[cookie-reader] sessionid_ss row found:', sessionRowSeen, 'total parts:', parts.length);
     cookieStr = parts.join('; ');
   } finally {
     try {
