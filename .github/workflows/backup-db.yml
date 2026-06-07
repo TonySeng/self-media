@@ -1,0 +1,25 @@
+name: Backup Database
+
+# 定期备份数据库（可选，如果不想自动备份可以删除此文件）
+on:
+  schedule:
+    # 每天凌晨 2 点备份（UTC时间，北京时间+8小时）
+    - cron: '0 18 * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create backup
+        run: |
+          mkdir -p backups
+          cp prisma/dev.db "backups/dev.db.$(date +%Y%m%d-%H%M%S)"
+      - name: Commit backup
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add backups/
+          git commit -m "auto: database backup $(date +%Y-%m-%d)" || echo "No changes"
+          git push
