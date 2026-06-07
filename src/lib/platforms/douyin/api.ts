@@ -84,6 +84,7 @@ export async function listComments(
   awemeId: string,
   maxPages: number = 10,
   ownerUid?: string,
+  sign?: { msToken: string; aBogus: string },
 ): Promise<StandardizedComment[]> {
   const all: StandardizedComment[] = [];
   let cursor = 0;
@@ -92,6 +93,8 @@ export async function listComments(
     const url = fillTemplate(DOUYIN_ENDPOINTS.commentList.urlTemplate, {
       awemeId,
       cursor,
+      msToken: sign?.msToken ?? '',
+      aBogus: sign?.aBogus ?? '',
     });
     const res = await douyinFetch(url, { cookie });
     const json = (await res.json()) as Record<string, unknown>;

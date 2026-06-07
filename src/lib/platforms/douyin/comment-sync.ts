@@ -32,7 +32,24 @@ export async function syncWorkComments(
   const cookieMap = parseCookieString(cookie);
   const ownerUid = cookieMap['uid_tt'] || undefined;
 
-  const fetched = await listComments(cookie, work.platformWorkId, maxPages, ownerUid);
+  // 评论列表接口需要 msToken / a_bogus 签名（与回复评论共用同一份）
+  const signSetting = await db.setting.findUnique({
+    where: { key: `reply_sign_${work.account.id}` },
+  });
+  let sign: { msToken: string; aBogus: string } | undefined;
+  if (signSetting?.value && typeof signSetting.value === 'object') {
+    const v = signSetting.value as { msToken?: string; aBogus?: string };
+    if (v.msToken && v.aBogus) {
+      sign = { msToken: v.msToken, aBogus: v.aBogus };
+    }
+  }
+  if (!sign) {
+    throw new Error(
+      `账号 "${work.account.nickname}" 缺少评论签名，请到「设置 → 平台账号 → 回复签名」点「自动抓取签名」`,
+    );
+  }
+
+  const fetched = await listComments(cookie, work.platformWorkId, maxPages, ownerUid, sign);
 
   let newCount = 0;
 
