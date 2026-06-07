@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<AIAnalysisType, string> = {
   COMMENT_INSIGHT: '评论洞察',
   COMMENT_REPLY: '评论回复',
   BENCHMARK: '对标分析',
+  COPY_BATCH_GEN: 'AI 批量生成',
 };
 
 /**

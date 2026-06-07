@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -191,6 +192,9 @@ function MaterialsInner() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-60"
             />
+            <Link href="/materials/ai-generate">
+              <Button variant="outline">AI 生成文案</Button>
+            </Link>
             <Button onClick={() => { setCreateType(activeType === 'ALL' ? 'COPY' : activeType); setCreateDialogOpen(true); }}>
               新建素材
             </Button>

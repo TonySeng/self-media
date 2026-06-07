@@ -54,6 +54,12 @@ export const DEFAULT_PROMPTS: Record<AIAnalysisType, DefaultPrompt> = {
     userTemplate:
       '作品标题：{{workTitle}}\n作品文案：{{workDesc}}\n\n用户评论（来自 {{authorName}}）：\n{{commentContent}}\n\n请生成一条回复。',
   },
+  COPY_BATCH_GEN: {
+    systemPrompt:
+      '你是短视频文案创作者，擅长在抖音/小红书等平台写出有钩子、有节奏、自然口语化的短文案。基于用户给定的方向、对标爆款和风格样本，批量产出 N 条**风格各异**的可直接发布的文案。每条都应有差异化角度（开头钩子、叙事方式、情绪基调），避免雷同。',
+    userTemplate:
+      '账号定位：{{niche}}\n本次方向 / 要求：{{direction}}\n需要生成数量：{{count}} 条\n\n{{benchmarksBlock}}\n\n{{styleSamplesBlock}}\n\n输出格式（严格遵守）：\n- 每条文案：先一行 `## ` 开头的标题（不含编号），空一行后写正文\n- 正文允许换行、emoji、话题标签\n- 每条之间用单独一行 `---` 分隔（首条前面不写、末条后面不写）\n- 不要输出任何编号、解释、前后语、不要包裹引号\n\n请输出 {{count}} 条文案。',
+  },
 };
 
 export function fillTemplate(

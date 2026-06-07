@@ -273,6 +273,7 @@ enum AIAnalysisType {
   COMMENT_INSIGHT
   COMMENT_REPLY
   BENCHMARK
+  COPY_BATCH_GEN
 }
 
 enum AIAnalysisStatus {
