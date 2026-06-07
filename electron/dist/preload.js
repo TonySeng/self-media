@@ -5,4 +5,5 @@ electron_1.contextBridge.exposeInMainWorld('electron', {
     readChromeCookies: (profilePath) => electron_1.ipcRenderer.invoke('read-chrome-cookies', profilePath),
     listChromeProfiles: () => electron_1.ipcRenderer.invoke('list-chrome-profiles'),
     openDouyinLogin: () => electron_1.ipcRenderer.invoke('open-douyin-login'),
+    captureReplySign: () => electron_1.ipcRenderer.invoke('capture-reply-sign'),
 });

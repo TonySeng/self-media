@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.openDouyinLoginWindow = openDouyinLoginWindow;
+exports.captureReplySign = captureReplySign;
 const electron_1 = require("electron");
 /**
  * 弹出一个独立 BrowserWindow 让用户登录抖音
@@ -100,5 +101,91 @@ async function openDouyinLoginWindow() {
             catch { /* ignore */ }
             reject(new Error('登录超时（5 分钟）'));
         }, 5 * 60 * 1000);
+    });
+}
+/**
+ * 弹出一个 BrowserWindow，引导用户在抖音创作者中心找一条评论回复一下，
+ * 监听 `multi_publish` 请求，从 URL 自动提取 msToken / aBogus 签名。
+ *
+ * 用同一个 partition 的 session（已登录态），所以无需重新扫码。
+ */
+async function captureReplySign() {
+    const partition = 'persist:douyin-login';
+    const ses = electron_1.session.fromPartition(partition);
+    // 检查 cookie 是否存在
+    const cookies = await ses.cookies.get({ domain: '.douyin.com' });
+    const hasSession = cookies.some((c) => c.name === 'sessionid_ss' && c.value);
+    if (!hasSession) {
+        throw new Error('请先扫码登录抖音');
+    }
+    const win = new electron_1.BrowserWindow({
+        width: 1280,
+        height: 900,
+        title: '抓取评论签名 - 请到任意作品下回复一条评论',
+        webPreferences: {
+            partition,
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    });
+    return new Promise((resolve, reject) => {
+        let resolved = false;
+        const TARGET_REGEX = /multi_publish\/.*[?&]msToken=([^&]+).*[?&]a_bogus=([^&]+)/;
+        function done(value) {
+            if (resolved)
+                return;
+            resolved = true;
+            try {
+                win.webContents.session.webRequest.onBeforeRequest(null);
+            }
+            catch { /* ignore */ }
+            try {
+                win.close();
+            }
+            catch { /* ignore */ }
+            if (value instanceof Error)
+                reject(value);
+            else
+                resolve(value);
+        }
+        // 监听所有发出的请求 URL
+        win.webContents.session.webRequest.onBeforeRequest({ urls: ['https://*.douyin.com/*multi_publish*'] }, (details, callback) => {
+            try {
+                const url = details.url;
+                // 直接从查询字符串解析（更稳）
+                const u = new URL(url);
+                const msToken = u.searchParams.get('msToken') ?? '';
+                const aBogus = u.searchParams.get('a_bogus') ?? '';
+                if (msToken && aBogus) {
+                    // 让请求继续完成，再异步关闭窗口
+                    setTimeout(() => done({ msToken, aBogus }), 200);
+                }
+                else {
+                    // 兜底正则
+                    const m = url.match(TARGET_REGEX);
+                    if (m && m[1] && m[2]) {
+                        setTimeout(() => done({
+                            msToken: decodeURIComponent(m[1]),
+                            aBogus: decodeURIComponent(m[2]),
+                        }), 200);
+                    }
+                }
+            }
+            catch { /* ignore parse errors */ }
+            callback({});
+        });
+        // 引导用户：直接打开创作者中心首页，让用户进作品评论区回复
+        void win.loadURL('https://creator.douyin.com/creator-micro/content/manage');
+        win.on('closed', () => {
+            if (resolved)
+                return;
+            resolved = true;
+            reject(new Error('用户取消抓取签名'));
+        });
+        // 3 分钟超时
+        setTimeout(() => {
+            if (!resolved)
+                done(new Error('未检测到评论回复请求（请在 3 分钟内回复一条评论）'));
+        }, 3 * 60 * 1000);
     });
 }

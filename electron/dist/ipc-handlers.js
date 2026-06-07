@@ -16,4 +16,7 @@ function registerIpcHandlers(ipcMain) {
     ipcMain.handle('open-douyin-login', async () => {
         return (0, login_window_1.openDouyinLoginWindow)();
     });
+    ipcMain.handle('capture-reply-sign', async () => {
+        return (0, login_window_1.captureReplySign)();
+    });
 }

@@ -1,6 +1,6 @@
 import type { IpcMain } from 'electron';
 import { listBrowserProfiles, readDouyinCookiesFromProfile } from './cookie-reader';
-import { openDouyinLoginWindow } from './login-window';
+import { openDouyinLoginWindow, captureReplySign } from './login-window';
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('list-chrome-profiles', () => {
@@ -16,5 +16,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('open-douyin-login', async () => {
     return openDouyinLoginWindow();
+  });
+
+  ipcMain.handle('capture-reply-sign', async () => {
+    return captureReplySign();
   });
 }

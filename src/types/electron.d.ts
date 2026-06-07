@@ -16,6 +16,10 @@ declare global {
         secUid: string | null;
         nickname: string | null;
       }>;
+      captureReplySign: () => Promise<{
+        msToken: string;
+        aBogus: string;
+      }>;
     };
   }
 }

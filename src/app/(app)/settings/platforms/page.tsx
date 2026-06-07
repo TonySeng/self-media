@@ -398,6 +398,7 @@ function ReplySignSection({ accountId }: { accountId: string }) {
   const [aBogus, setABogus] = useState('');
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
@@ -428,6 +429,32 @@ function ReplySignSection({ accountId }: { accountId: string }) {
     }
   }
 
+  async function autoCapture() {
+    if (!window.electron) return;
+    setCapturing(true);
+    try {
+      const data = await window.electron.captureReplySign();
+      // 直接保存到数据库
+      const res = await fetch(`/api/platforms/douyin/accounts/${accountId}/reply-sign`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        toast.error('保存失败');
+        return;
+      }
+      setMsToken(data.msToken);
+      setABogus(data.aBogus);
+      setUpdatedAt(new Date().toISOString());
+      toast.success('已自动抓取并保存评论签名');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '抓取失败');
+    } finally {
+      setCapturing(false);
+    }
+  }
+
   const ageMinutes = updatedAt
     ? Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000)
     : null;
@@ -448,6 +475,18 @@ function ReplySignSection({ accountId }: { accountId: string }) {
         <div className={`text-xs ${ageMinutes > 30 ? 'text-orange-500' : 'text-muted-foreground'}`}>
           上次更新：{ageMinutes} 分钟前
           {ageMinutes > 30 && '（签名通常 30 分钟过期，建议重抓）'}
+        </div>
+      )}
+
+      {typeof window !== 'undefined' && window.electron && (
+        <div className="rounded-md border border-green-200 bg-green-50/40 p-3 space-y-2">
+          <p className="text-xs font-medium">推荐：自动抓取（桌面版）</p>
+          <p className="text-xs text-muted-foreground">
+            点击下方按钮会弹出抖音创作者中心，请在任意作品下回复一条评论，应用会自动抓取签名并保存。
+          </p>
+          <Button size="sm" onClick={() => void autoCapture()} disabled={capturing}>
+            {capturing ? '等待回复评论…（最多 3 分钟）' : '自动抓取签名'}
+          </Button>
         </div>
       )}
 

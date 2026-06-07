@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('list-chrome-profiles'),
   openDouyinLogin: () =>
     ipcRenderer.invoke('open-douyin-login'),
+  captureReplySign: () =>
+    ipcRenderer.invoke('capture-reply-sign'),
 });
