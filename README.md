@@ -79,27 +79,6 @@ pnpm dev
 | `docker compose up -d` | 启动开发用 PostgreSQL |
 | `docker compose down` | 停止 |
 
-## 部署到腾讯云服务器
-
-```bash
-# 上传代码到服务器
-rsync -avz --exclude node_modules --exclude .next --exclude data \
-    ./ ubuntu@124.222.64.26:/srv/self-media/
-
-ssh ubuntu@124.222.64.26
-cd /srv/self-media
-
-# 创建数据卷目录
-sudo mkdir -p /var/self-media/{db,uploads,caddy_data,caddy_config}
-
-# 在服务器上设置 .env（POSTGRES_PASSWORD/MASTER_KEY/ADMIN_PASSWORD_HASH/SESSION_SECRET）
-cp .env.example .env
-node scripts/gen-secrets.mjs "你的密码"   # 输出复制到 .env
-nano .env
-
-# 构建并启动
-docker compose -f docker-compose.prod.yml up -d --build
-```
 
 ## 已知限制
 
